@@ -50,7 +50,7 @@ class PositionalEncoding(torch.nn.Module):
 
 
 class TextTransformer(torch.nn.Module):
-    def __init__(self, token_count, model_dim=512, head_count=8, layers=6, device='cpu'):
+    def __init__(self, token_count, model_dim=512, head_count=8, layers=6):
         super(TextTransformer, self).__init__()
 
         self.token_count = token_count
@@ -58,23 +58,34 @@ class TextTransformer(torch.nn.Module):
         self.head_count = head_count
         self.layers = layers
 
-        self.src_mask = generate_square_subsequent_mask(1024).to(device)
+        self.src_mask = generate_square_subsequent_mask(1024).to('cuda')
+        #self.register_buffer('src_mask', self.src_mask)
 
         self.embed = torch.nn.Embedding(token_count, embedding_dim=self.model_dim)
-        self.position_encoder = PositionalEncoding(d_model=self.model_dim, dropout=0.05, max_len=1024)
+        self.position_encoder = PositionalEncoding(d_model=self.model_dim, dropout=0.025, max_len=1024)
 
-        encoder_layer = torch.nn.TransformerEncoderLayer(d_model=self.model_dim, nhead=self.head_count)
+        encoder_layer = torch.nn.TransformerEncoderLayer(d_model=self.model_dim, nhead=self.head_count, dim_feedforward=self.model_dim*4, dropout=0.025, batch_first=True)
         self.model = torch.nn.TransformerEncoder(encoder_layer, num_layers=self.layers)
 
-        self.output_layer = torch.nn.Linear(
+        self.decoder = torch.nn.Linear(
             in_features=self.model_dim,
-            out_features=self.token_count)
+            out_features=self.token_count,
+            bias=True)
+
+        self.init_weights()
+
+    def init_weights(self) -> None:
+        pass
+        #initrange = 0.002
+        #self.embed.weight.data.uniform_(-initrange, initrange)
+        #self.decoder.bias.data.zero_()
+        #self.decoder.weight.data.uniform_(-initrange, initrange)
 
     def forward(self, input_chars):
         emb = self.embed(input_chars)
         emb = self.position_encoder(emb)
-        output = self.model(emb, self.src_mask[:emb.shape[0], :emb.shape[0]])
-        logits = self.output_layer(output)
+        output = self.model(emb, self.src_mask[:emb.shape[1], :emb.shape[1]])
+        logits = self.decoder(output)
         log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
         return log_probs
 
@@ -99,12 +110,13 @@ def sample_characters(model, input_chars, char_count=100, temperature=1.0):
 
 def print_samples(seed_text_ids, model, vocabulary):
     for ids in seed_text_ids:
-        sampled_chars = sample_characters(model, ids, char_count=20, temperature=1.5)
+        sampled_chars = sample_characters(model, ids, char_count=40, temperature=1.5)
         print('>>>>', vocabulary.decode_ids(ids.reshape(-1).tolist() + sampled_chars))
 
 
 def main():
     args = parseargs()
+    print(args)
 
     sp = spm.SentencePieceProcessor(args.vocabulary)
     text_ids = np.load(args.input_data).astype(np.int16)
@@ -112,10 +124,10 @@ def main():
     print(sp.decode(text_ids[:500].tolist()))
     print('|'.join([sp.decode(text_ids[i:i+1].tolist()) for i in range(100)]))
 
-    #try:
-    #  device = torch.device('cuda')
-    #except:
-    device = torch.device('cpu')
+    try:
+      device = torch.device('cuda')
+    except:
+      device = torch.device('cpu')
     print('Using device:', device)
 
     model = TextTransformer(sp.get_piece_size(), model_dim=args.model_dim, head_count=args.head_count, layers=args.layers).to(device=device)
