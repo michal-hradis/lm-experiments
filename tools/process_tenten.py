@@ -3,7 +3,7 @@ import sys
 
 def main():
     ignored_tags = ('<s>', '<p>', '</s>', '</doc>')
-    words = []
+    words = ['<p>']
     merge = False
     for line in open('c:\\projects\\lm-experiments\\data\\csTenTen17.txt.filepart', 'r', encoding='utf8'):#sys.stdin:
         line = line.strip()
@@ -12,8 +12,8 @@ def main():
             if words:
                 words[-1] = words[-1] + line
         elif line == '</p>':
-            print(' '.join(words))
-            words = []
+            print(' '.join(words + ['</p>']))
+            words = ['<p>']
         elif line[:5] == '<doc ':
             print('<doc>')
         elif line == '<g/>':
