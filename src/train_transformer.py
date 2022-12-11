@@ -24,6 +24,7 @@ def parseargs():
     parser.add_argument('--max-iteration', default=100000, type=int, help='Hidden state size.')
     parser.add_argument('--learning-rate', default=0.0005, type=float, help='Learning rate.')
     parser.add_argument('--weight-decay', default=0.0001, type=float, help='Weight decay.')
+    parser.add_argument('--conv', action='store_true', help='Use Conv net.')
 
     args = parser.parse_args()
     return args
@@ -48,6 +49,32 @@ class PositionalEncoding(torch.nn.Module):
         x = x + self.pe[:x.size(0)]
         return self.dropout(x)
 
+
+class TextConvModel(torch.nn.Module):
+    def __init__(self, token_count, model_dim=512, layers=6):
+        super(TextConvModel, self).__init__()
+        from conv_nets import ResidualConvBlock, ConvStack, CausalConvBlock
+
+        self.token_count = token_count
+        self.model_dim = model_dim
+        self.layers = layers
+
+        self.embed = torch.nn.Embedding(token_count, embedding_dim=self.model_dim)
+
+        module = ResidualConvBlock(self.model_dim, CausalConvBlock(self.model_dim))
+        self.model = ConvStack(module, self.layers)
+
+        self.decoder = torch.nn.Linear(
+            in_features=self.model_dim,
+            out_features=self.token_count,
+            bias=True)
+
+    def forward(self, input_chars):
+        emb = self.embed(input_chars)
+        output = self.model(emb)
+        logits = self.decoder(output)
+        log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
+        return log_probs
 
 class TextTransformer(torch.nn.Module):
     def __init__(self, token_count, model_dim=512, head_count=8, layers=6):
@@ -130,7 +157,11 @@ def main():
       device = torch.device('cpu')
     print('Using device:', device)
 
-    model = TextTransformer(sp.get_piece_size(), model_dim=args.model_dim, head_count=args.head_count, layers=args.layers).to(device=device)
+    if args.conv:
+        model = TextConvModel(sp.get_piece_size(), model_dim=args.model_dim, layers=args.layers)
+    else:
+        model = TextTransformer(sp.get_piece_size(), model_dim=args.model_dim, head_count=args.head_count, layers=args.layers).to(device=device)
+
 
     if args.start_iteration > 0:
         model.load_state_dict(torch.load(f'model_{args.start_iteration:07d}.pth', map_location=device))
