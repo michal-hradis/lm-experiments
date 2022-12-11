@@ -5,7 +5,7 @@ def main():
     ignored_tags = ('<s>', '<p>', '</s>', '</doc>')
     words = ['<p>']
     merge = False
-    for line in open('c:\\projects\\lm-experiments\\data\\csTenTen17.txt.filepart', 'r', encoding='utf8'):#sys.stdin:
+    for line in sys.stdin:
         line = line.strip()
         if merge:
             merge = False
@@ -15,7 +15,9 @@ def main():
             print(' '.join(words + ['</p>']))
             words = ['<p>']
         elif line[:5] == '<doc ':
-            print('<doc>')
+            words = ['<doc>'] + [part for part in line.split() if "src=" in part or "title=" in part or "wiki_categories=" in part]
+            print(' '.join(words))
+            words = ['<p>']
         elif line == '<g/>':
             merge = True
         elif line not in ignored_tags:
