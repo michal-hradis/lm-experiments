@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import argparse
 import math
+from conv_nets import ResidualConvBlock, ConvStack, CausalConvBlock
 
 
 def parseargs():
@@ -25,6 +26,8 @@ def parseargs():
     parser.add_argument('--learning-rate', default=0.0005, type=float, help='Learning rate.')
     parser.add_argument('--weight-decay', default=0.0001, type=float, help='Weight decay.')
     parser.add_argument('--conv', action='store_true', help='Use Conv net.')
+    parser.add_argument('--start-conv-count', default=0, type=int, help='Number of convolutional layers at the beginning of the model.')
+    parser.add_argument('--end-conv-count', default=2, type=int, help='Number of convolutional layers at the end of the model.')
 
     args = parser.parse_args()
     return args
@@ -53,7 +56,6 @@ class PositionalEncoding(torch.nn.Module):
 class TextConvModel(torch.nn.Module):
     def __init__(self, token_count, model_dim=512, layers=6):
         super(TextConvModel, self).__init__()
-        from conv_nets import ResidualConvBlock, ConvStack, CausalConvBlock
 
         self.token_count = token_count
         self.model_dim = model_dim
@@ -76,8 +78,9 @@ class TextConvModel(torch.nn.Module):
         log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
         return log_probs
 
+
 class TextTransformer(torch.nn.Module):
-    def __init__(self, token_count, model_dim=512, head_count=8, layers=6):
+    def __init__(self, token_count, model_dim=512, head_count=8, layers=6, start_conv=0, end_conv=0):
         super(TextTransformer, self).__init__()
 
         self.token_count = token_count
@@ -86,13 +89,23 @@ class TextTransformer(torch.nn.Module):
         self.layers = layers
 
         self.src_mask = generate_square_subsequent_mask(1024).to('cuda')
-        #self.register_buffer('src_mask', self.src_mask)
-
         self.embed = torch.nn.Embedding(token_count, embedding_dim=self.model_dim)
-        self.position_encoder = PositionalEncoding(d_model=self.model_dim, dropout=0.025, max_len=1024)
 
+        if start_conv:
+            module = ResidualConvBlock(self.model_dim, CausalConvBlock(self.model_dim))
+            self.start_conv = ConvStack(module, start_conv)
+        else:
+            self.start_conv = None
+
+        self.position_encoder = PositionalEncoding(d_model=self.model_dim, dropout=0.025, max_len=1024)
         encoder_layer = torch.nn.TransformerEncoderLayer(d_model=self.model_dim, nhead=self.head_count, dim_feedforward=self.model_dim*4, dropout=0.025, batch_first=True)
         self.model = torch.nn.TransformerEncoder(encoder_layer, num_layers=self.layers)
+
+        if end_conv:
+            module = ResidualConvBlock(self.model_dim, CausalConvBlock(self.model_dim))
+            self.end_conv = ConvStack(module, end_conv)
+        else:
+            self.end_conv = None
 
         self.decoder = torch.nn.Linear(
             in_features=self.model_dim,
@@ -110,9 +123,14 @@ class TextTransformer(torch.nn.Module):
 
     def forward(self, input_chars):
         emb = self.embed(input_chars)
+        if self.start_conv:
+            emb = self.start_conv(emb)
         emb = self.position_encoder(emb)
         output = self.model(emb, self.src_mask[:emb.shape[1], :emb.shape[1]])
+        if self.end_conv:
+            output = self.end_conv(output)
         logits = self.decoder(output)
+
         log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
         return log_probs
 
@@ -160,8 +178,8 @@ def main():
     if args.conv:
         model = TextConvModel(sp.get_piece_size(), model_dim=args.model_dim, layers=args.layers)
     else:
-        model = TextTransformer(sp.get_piece_size(), model_dim=args.model_dim, head_count=args.head_count, layers=args.layers).to(device=device)
-
+        model = TextTransformer(sp.get_piece_size(), model_dim=args.model_dim, head_count=args.head_count, layers=args.layers,
+                                start_conv=args.start_conv_count, end_conv=args.end_conv_count).to(device=device)
 
     if args.start_iteration > 0:
         model.load_state_dict(torch.load(f'model_{args.start_iteration:07d}.pth', map_location=device))
