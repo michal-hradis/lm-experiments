@@ -19,14 +19,12 @@ class CausalConvBlock(torch.nn.Module):
                                      padding=(self.kernel_size - 1) * self.dilation)
 
     def forward(self, x):
-        x = x.permute(0, 2, 1)
         x = self.layer1(x)
         x = torch.nn.functional.relu(x, inplace=True)
-        x = x[:, :, 0:-(self.kernel_size-1)]*self.dilation
+        x = x[:, :, 0:-(self.kernel_size-1)*self.dilation]
         x = self.layer2(x)
         x = torch.nn.functional.relu(x, inplace=True)
-        x = x[:, :, 0:-(self.kernel_size-1)]*self.dilation
-        x = x.permute(0, 2, 1)
+        x = x[:, :, 0:-(self.kernel_size-1)*self.dilation]
         return x
 
 
@@ -38,7 +36,9 @@ class ResidualConvBlock(torch.nn.Module):
         self.norm = torch.nn.LayerNorm(model_dim, eps=self.layer_norm_eps)
 
     def forward(self, x):
+        x = x.permute(0, 2, 1)
         x = x + self.comp_block(x)
+        x = x.permute(0, 2, 1)
         x = self.norm(x)
         return x
 

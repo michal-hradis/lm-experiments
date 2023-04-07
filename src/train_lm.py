@@ -9,8 +9,9 @@ import argparse
 
 def parseargs():
     parser = argparse.ArgumentParser('Train recurrent network LM.')
-    parser.add_argument('-i', '--input_data', required=True, help='npy data file.')
+    parser.add_argument('-i', '--input-data', required=True, help='npy data file.')
     parser.add_argument('-v', '--vocabulary', required=True, help='Sentencepiece vocabulary.')
+    parser.add_argument('--data-limit', default=-1, type=int, help='Maximum number of tokens to use for training.')
 
     parser.add_argument('--start-iteration', default=0, type=int, help='Start from this iteration.')
 
@@ -86,6 +87,9 @@ def main():
 
     sp = spm.SentencePieceProcessor(args.vocabulary)
     text_ids = np.load(args.input_data).astype(np.int16)
+
+    if args.data_limit > 0:
+        text_ids = text_ids[:args.data_limit]
 
     print(sp.decode(text_ids[:500].tolist()))
     print('|'.join([sp.decode(text_ids[i:i+1].tolist()) for i in range(100)]))
@@ -166,10 +170,12 @@ def main():
         # Keep the LSTM state for the nest iteration, but disconect (detach) it from the graph.
         model_state = [state.detach() for state in model_state]
 
+        model_state[0][:, :, ...] = 0
+        model_state[1][:, :, ...] = 0
         # Reset several reading heads and corresponging LSTM states.
         for i in range(0, args.batch_size, 32):
             head_id = (iteration + i) % args.batch_size
-            model_state[0][:, head_id, ...] = 0
+            #model_state[0][:, head_id, ...] = 0
             model_state[1][:, head_id, ...] = 0
             batch_heads[head_id] = np.random.randint(text_ids.size - args.batch_size*args.batch_length - 100)
 
