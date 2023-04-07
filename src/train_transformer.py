@@ -26,9 +26,12 @@ def parseargs():
     parser.add_argument('--view-step', default=1000, type=int, help='How often we should test.')
     parser.add_argument('--max-iteration', default=100000, type=int, help='Hidden state size.')
     parser.add_argument('--learning-rate', default=0.0005, type=float, help='Learning rate.')
-    parser.add_argument('--weight-decay', default=0.0001, type=float, help='Weight decay.')
+    parser.add_argument('--weight-decay', default=0.01, type=float, help='Weight decay.')
     parser.add_argument('--experts', default=1, type=int, help='Number of experts.')
     parser.add_argument('--conv', action='store_true', help='Use Conv net.')
+    parser.add_argument('--warmup', default=2000, type=int, help='Linear warmup iterations starting from 0.')
+    parser.add_argument('--gradient-clip', default=2000, type=float, help='Per-value gradinet clipping value.')
+    parser.add_argument('--dropout', default=0.1, type=float, help='Dropout.')
     parser.add_argument('--start-conv-count', default=0, type=int, help='Number of convolutional layers at the beginning of the model.')
     parser.add_argument('--end-conv-count', default=0, type=int, help='Number of convolutional layers at the end of the model.')
 
@@ -76,14 +79,14 @@ class TextConvModel(torch.nn.Module):
 
     def forward(self, input_chars):
         emb = self.embed(input_chars)
-        output = self.model(emb)[0]
+        output = self.model(emb)
         logits = self.decoder(output)
         log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
         return log_probs
 
 
 class TextTransformer(torch.nn.Module):
-    def __init__(self, token_count, model_dim=512, head_count=8, layers=6, start_conv=0, end_conv=0, experts=0):
+    def __init__(self, token_count, model_dim=512, head_count=8, layers=6, start_conv=0, end_conv=0, dropout=0.1):
         super(TextTransformer, self).__init__()
 
         self.token_count = token_count
@@ -102,10 +105,10 @@ class TextTransformer(torch.nn.Module):
 
         self.position_encoder = PositionalEncoding(d_model=self.model_dim, dropout=0.025, max_len=1024)
         if experts < 2:
-            encoder_layer = torch.nn.TransformerEncoderLayer(d_model=self.model_dim, nhead=self.head_count, dim_feedforward=self.model_dim*4, dropout=0.025, batch_first=True)
+            encoder_layer = torch.nn.TransformerEncoderLayer(d_model=self.model_dim, nhead=self.head_count, dim_feedforward=self.model_dim*4, dropout=dropout,, batch_first=True)
         else:
             encoder_layer = torch.nn.TransformerEncoderLayer(d_model=self.model_dim, nhead=self.head_count,
-                                                             dim_feedforward=self.model_dim * 4, dropout=0.025,
+                                                             dim_feedforward=self.model_dim * 4, dropout=dropout, ,
                                                              batch_first=True)
 
         self.model = torch.nn.TransformerEncoder(encoder_layer, num_layers=self.layers)
@@ -241,8 +244,6 @@ def main():
 
     sp = spm.SentencePieceProcessor(args.vocabulary)
     text_ids = np.load(args.input_data).astype(np.int16)
-    if args.data_limit > -1:
-        text_ids = text_ids[:args.data_limit]
 
     print(sp.decode(text_ids[:500].tolist()))
     print('|'.join([sp.decode(text_ids[i:i+1].tolist()) for i in range(100)]))
@@ -281,6 +282,13 @@ def main():
 
     # The prefix has to be a Torch tensor on the same device as the model.
     seed_text_ids = [torch.LongTensor(ids.reshape(1, -1)).to(device=device) for ids in seed_text_ids]
+
+    if args.start_iteration > 0:
+        model.load_state_dict(torch.load(f'model_{args.start_iteration:07d}.pth', map_location=device))
+        #model.eval()
+        #print_samples(seed_text_ids, model, sp)
+        #model.train()
+
 
     #print_samples(seed_text_ids, model, sp)
 
@@ -350,6 +358,13 @@ def main():
 
         loss_list.append(loss.item()) # We'd like store a single float velue not a tensor connected to the huge computational graph.
 
+        # Update the model.
+        optimizer.zero_grad()
+        loss.backward()
+        if args.gradient_clip > 0:
+            #torch.nn.utils.clip_grad_norm_(model.parameters(), args.gradient_clip)
+            torch.nn.utils.clip_grad_value_(model.parameters(), args.gradient_clip)
+        optimizer.step()
 
         # print progress (loss, accuracy, generated text)
         if iteration % args.view_step == args.view_step -1:
@@ -358,10 +373,8 @@ def main():
             print_samples(seed_text_ids, model, sp)
             loss_list = []
             acc_list = []
-            time_list = []
-            torch.save(model.state_dict(), f'model_{iteration:07d}.pth')
-
-
+            if iteration != args.start_iteration:
+                torch.save(model.state_dict(), f'model_{iteration:07d}.pth')
 
 
 if __name__ == '__main__':
