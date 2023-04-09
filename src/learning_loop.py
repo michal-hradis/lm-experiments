@@ -59,6 +59,7 @@ class LearningLoop:
         self.checkpoint_dir = args.checkpoint_dir
 
         self.gradient_clip = args.gradient_clip
+        self.gradient_norm_clip = args.gradient_norm_clip
 
         checkpoint_path = None
         if args.in_checkpoint is not None:
@@ -189,8 +190,6 @@ class LearningLoop:
                 all_loss.append(loss.cpu().item())
                 if i == 0:
                     for gt, t, o, i in zip(batch_labels, batch_data, output.cpu().numpy(), range(32)):
-                        #print('GT: ', [self.tokenizer.IdToPiece(i) for i in gt.cpu().numpy().tolist()])
-                        #print('INPUT: ', [self.tokenizer.IdToPiece(i) for i in t.cpu().numpy().tolist()])
                         gt = self.tokenizer.DecodeIds(gt.cpu().numpy().tolist())
                         print('GT:      ', gt)
                         t = self.tokenizer.DecodeIds(t.cpu().numpy().tolist())
@@ -208,5 +207,5 @@ class LearningLoop:
         if self.tb_writer:
             self.tb_writer.add_scalar(f'Loss_val/{dataset.name}', loss, self.iteration)
 
-        print(f"TEST {dataset.name} loss:{loss:.3f}")
+        print(f"TEST {dataset.name} {self.iteration} loss:{loss:.3f}")
 
