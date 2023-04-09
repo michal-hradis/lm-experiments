@@ -1,5 +1,4 @@
 from labml_nn.transformers.switch import SwitchTransformer, SwitchTransformerLayer, SwitchFeedForward
-from labml_nn.transformers import MultiHeadAttention
 from labml_nn.transformers.feed_forward import FeedForward
 import torch
 from model_common import generate_square_subsequent_mask, PositionalEncoding
@@ -15,7 +14,8 @@ def build_switch_transformer(model_dim, head_count, layers, n_experts, dropout=0
     n_layers = layers
     return SwitchTransformer(
         SwitchTransformerLayer(d_model=d_model,
-                               attn=MultiHeadAttention(heads, d_model, dropout),
+                               attn=torch.nn.MultiheadAttention(d_model, heads, dropout=dropout
+                                                                , bias=True, add_bias_kv=False, add_zero_attn=False, kdim=None, vdim=None, batch_first=False, device=None, dtype=None),
                                feed_forward=SwitchFeedForward(capacity_factor=capacity_factor,
                                                               drop_tokens=drop_tokens,
                                                               is_scale_prob=is_scale_prob,
