@@ -6,11 +6,9 @@ from model_common import generate_square_subsequent_mask, PositionalEncoding
 from labml_nn.transformers.utils import subsequent_mask
 
 
-def build_switch_transformer(model_dim, head_count, layers, n_experts):
+def build_switch_transformer(model_dim, head_count, layers, n_experts, dropout=0.1, capacity_factor=1.2):
     d_model = model_dim
     heads = head_count
-    dropout = 0.1
-    capacity_factor = 1.2
     drop_tokens = True
     is_scale_prob = True
     #expert = FeedForward(d_model, d_model * 2, dropout)
@@ -46,7 +44,7 @@ class TextSwitchTransformer(torch.nn.Module):
 
         self.position_encoder = PositionalEncoding(d_model=self.model_dim, dropout=dropout, max_len=1024)
 
-        self.model = build_switch_transformer(self.model_dim, self.head_count, self.layers, self.n_experts)
+        self.model = build_switch_transformer(self.model_dim, self.head_count, self.layers, self.n_experts, self.dropout)
 
         self.decoder = torch.nn.Linear(
             in_features=self.model_dim,
@@ -66,3 +64,9 @@ class TextSwitchTransformer(torch.nn.Module):
         logits = self.decoder(output)
         log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
         return log_probs, f, p, n_d, p_max
+
+    def load_balancing_loss(self, counts, route_prob):
+        total = counts.sum(dim=-1, keepdims=True)
+        route_frac = counts / total
+        route_prob = route_prob / total
+        return self.n_experts * (route_frac * route_prob).sum()

@@ -133,9 +133,16 @@ class LearningLoop:
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
                 else:
-                    output = self.model(batch_data)[0]
-                    trn_loss = self.loss(output, batch_labels)
-                    trn_loss = torch.mean(trn_loss)
+                    output = self.model(batch_data)
+                    if isinstance(output, tuple):
+                        output, counts, route_prob, n_dropped, route_prob_max = output
+                        trn_loss = torch.mean(self.loss(output, batch_labels))
+                        load_balancing_loss = self.model.module.load_balancing_loss(counts, route_prob)
+                        print(f'trn_loss: {trn_loss.item()}, load balancing loss: {load_balancing_loss.item()}, dropped: {n_dropped}')
+                        trn_loss += 0.01 * load_balancing_loss
+                    else:
+                        trn_loss = self.loss(output, batch_labels)
+                        trn_loss = torch.mean(trn_loss)
                     trn_loss.backward()
                     if self.gradient_clip > 0:
                         torch.nn.utils.clip_grad_value_(self.model.parameters(), self.gradient_clip)
