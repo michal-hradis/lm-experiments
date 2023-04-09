@@ -1,6 +1,6 @@
 import torch
-from conv_nets import ResidualConvBlock, ConvStack, ConvBlock
-from model_common import generate_square_subsequent_mask, PositionalEncoding
+from models.conv_nets import ResidualConvBlock, ConvStack, ConvBlock
+from models.model_common import generate_square_subsequent_mask, PositionalEncoding
 
 
 class TextConvModel(torch.nn.Module):

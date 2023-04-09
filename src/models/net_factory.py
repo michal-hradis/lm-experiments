@@ -1,7 +1,7 @@
 import json
 import logging
-from swith_transformer import TextSwitchTransformer
-from model_transformer import TextTransformer
+from models.swith_transformer import TextSwitchTransformer
+from models.model_transformer import TextTransformer
 
 
 def net_factory(config, token_count):

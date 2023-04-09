@@ -1,7 +1,7 @@
 from labml_nn.transformers.switch import SwitchTransformer, SwitchTransformerLayer, SwitchFeedForward
 from labml_nn.transformers.feed_forward import FeedForward
 import torch
-from model_common import generate_square_subsequent_mask, PositionalEncoding
+from models.model_common import generate_square_subsequent_mask, PositionalEncoding
 from labml_nn.transformers.utils import subsequent_mask
 
 

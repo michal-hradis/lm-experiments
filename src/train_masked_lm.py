@@ -1,6 +1,6 @@
 from learning_loop import LearningLoop
 import argparse
-from net_factory import net_factory
+from models.net_factory import net_factory
 import torch
 from dataset_text_lmdb import TextDatasetLMDB
 
