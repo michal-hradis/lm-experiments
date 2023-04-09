@@ -163,9 +163,10 @@ def levenshtein_alignment_substring(source, target, sub_cost=1, ins_cost=1, del_
     return alig
 
 from sty  import fg
-red = lambda text: fg.red + text + fg.white
+red = lambda text: fg.li_red + text + fg.white
 green = lambda text: fg.green + text + fg.white
-blue = lambda text: fg.blue + text + fg.white
+blue = lambda text: fg.da_blue + text + fg.white
+yellow = lambda text: fg.li_yellow + text + fg.white
 white = lambda text: text
 
 
@@ -188,6 +189,9 @@ def console_transcription_errors(transcription, ground_truth, missing_char="_"):
             current_operation = 'replace'
 
         if current_operation != operation and last_string or source_char is None and target_char is None:
+            last_string = ''.join(last_string)
+            last_string = last_string.replace(' ', '_')
+
             if operation == 'match':
                 source_transcription += ''.join(last_string)
             elif operation == 'insert':
@@ -195,7 +199,7 @@ def console_transcription_errors(transcription, ground_truth, missing_char="_"):
             elif operation == 'delete':
                 source_transcription += red(''.join(last_string))
             elif operation == 'replace':
-                source_transcription += green(''.join(last_string))
+                source_transcription += yellow(''.join(last_string))
             last_string = []
         operation = current_operation
 
