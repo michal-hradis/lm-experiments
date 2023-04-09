@@ -145,6 +145,7 @@ class LearningLoop:
                     else:
                         trn_loss = self.loss(output, batch_masked_labels)
                         trn_loss = torch.mean(trn_loss)
+
                     trn_loss.backward()
                     if self.gradient_clip > 0:
                         torch.nn.utils.clip_grad_value_(self.model.parameters(), self.gradient_clip)
@@ -154,6 +155,8 @@ class LearningLoop:
 
                 trn_loss = trn_loss.item()
                 trn_loss_list.append(trn_loss)
+
+
 
                 if self.tb_writer:
                     self.tb_writer.add_scalar('Loss/train', trn_loss, self.iteration)
@@ -196,11 +199,14 @@ class LearningLoop:
                 batch_masked_labels = batch_labels.clone()
                 batch_masked_labels[batch_data != 3] = 0
 
-                output = self.model(batch_data)[0]
+                output = self.model(batch_data)
                 loss = self.loss(output, batch_masked_labels)
                 all_loss.append(loss.cpu().item())
                 if i == 0:
                     for gt, t, o, i in zip(batch_labels, batch_data, output.cpu().numpy(), range(32)):
+                        gt = gt[:128]
+                        t = t[:128]
+                        o = o[:128]
                         gt = self.tokenizer.DecodeIds(gt.cpu().numpy().tolist())
                         print('GT:      ', gt)
                         t = self.tokenizer.DecodeIds(t.cpu().numpy().tolist())
@@ -209,8 +215,7 @@ class LearningLoop:
                         print('OUTPUT:  ', console_transcription_errors(o, gt))
                         print('CHANGES: ', console_transcription_errors(o, t))
                         print()
-              
-                if i > 10:
+                if i > 20:
                     break
         self.model.train()
 
