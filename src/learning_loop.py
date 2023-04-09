@@ -120,14 +120,16 @@ class LearningLoop:
                 with torch.no_grad():
                     batch_data = batch[0].to(self.device, non_blocking=True).long()
                     batch_labels = batch[1].to(self.device, non_blocking=True).long()
+                    batch_masked_labels = batch_labels.clone()
+                    batch_masked_labels[batch_data != 3] = 0
 
                 self.iteration += 1
                 net_t1 = time.time()
                 self.optimizer.zero_grad()
                 if self.scaler:
                     with torch.cuda.amp.autocast():
-                        output = self.model(batch_data, batch_labels)[0]
-                        trn_loss = self.loss(output, batch_labels)
+                        output = self.model(batch_data)[0]
+                        trn_loss = self.loss(output, batch_masked_labels)
                         trn_loss = torch.mean(trn_loss)
                     self.scaler.scale(trn_loss).backward()
                     self.scaler.step(self.optimizer)
@@ -136,12 +138,12 @@ class LearningLoop:
                     output = self.model(batch_data)
                     if isinstance(output, tuple):
                         output, counts, route_prob, n_dropped, route_prob_max = output
-                        trn_loss = torch.mean(self.loss(output, batch_labels))
+                        trn_loss = torch.mean(self.loss(output, batch_masked_labels))
                         load_balancing_loss = self.model.module.load_balancing_loss(counts, route_prob)
                         print(f'trn_loss: {trn_loss.item()}, load balancing loss: {load_balancing_loss.item()}, dropped: {n_dropped}')
                         trn_loss += 0.01 * load_balancing_loss
                     else:
-                        trn_loss = self.loss(output, batch_labels)
+                        trn_loss = self.loss(output, batch_masked_labels)
                         trn_loss = torch.mean(trn_loss)
                     trn_loss.backward()
                     if self.gradient_clip > 0:
@@ -191,9 +193,11 @@ class LearningLoop:
             for i, batch in enumerate(loader):
                 batch_data = batch[0].to(self.device, non_blocking=True).long()
                 batch_labels = batch[1].to(self.device, non_blocking=True).long()
+                batch_masked_labels = batch_labels.clone()
+                batch_masked_labels[batch_data != 3] = 0
 
                 output = self.model(batch_data)[0]
-                loss = self.loss(output, batch_labels)
+                loss = self.loss(output, batch_masked_labels)
                 all_loss.append(loss.cpu().item())
                 if i == 0:
                     for gt, t, o, i in zip(batch_labels, batch_data, output.cpu().numpy(), range(32)):

@@ -30,12 +30,12 @@ class Accuracy(torch.nn.Module):
             return correct_count / total_count
 
 class CrossEntropyLoss(torch.nn.Module):
-    def __init__(self, mask_token_id=3):
+    def __init__(self, mask_token_id=0):
         super().__init__()
         self.mask_token_id = mask_token_id
 
     def forward(self, logits, targets):
-        loss = torch.nn.functional.cross_entropy(logits.view(-1, logits.shape[-1]), targets.view(-1))
+        loss = torch.nn.functional.cross_entropy(logits.view(-1, logits.shape[-1]), targets.view(-1), ignore_index=self.mask_token_id)
         return loss
 
 import sentencepiece as spm
