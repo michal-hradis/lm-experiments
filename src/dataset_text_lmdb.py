@@ -32,12 +32,14 @@ class TextDatasetLMDB(Dataset):
         self.compressed = compressed
         self.env = lmdb.open(self.lmdb_path, readonly=True, lock=False, readahead=False, meminit=False)
         self.txn = self.env.begin(write=False)
-        # get mapping from index to lmdb key
-        for i, (key, _) in enumerate(self.txn.cursor()):
-            self.keys[i] = key
-            if len(self.keys) > 4000000:
-                break
-        #self.keys = {i: key for i, key in enumerate(self.txn.cursor().iternext(keys=True, values=False))}
+
+        key_file_path = os.path.join(self.lmdb_path, 'keys.txt')
+        if os.path.exists(key_file_path):
+            with open(key_file_path, 'r') as f:
+                self.keys = {i: key.strip().encode() for i, key in enumerate(f)}
+        else:
+            self.keys = {i: key for i, key in enumerate(self.txn.cursor().iternext(keys=True, values=False))}
+
         self.length = len(self.keys)
 
         self.name = os.path.basename(self.lmdb_path)
@@ -111,4 +113,4 @@ class TextDatasetLMDB(Dataset):
             tokens = tokens + [0] * (self.max_len - len(tokens))
             masked_tokens = masked_tokens + [0] * (self.max_len - len(masked_tokens))
 
-        return  torch.LongTensor(masked_tokens), torch.LongTensor(tokens),
+        return torch.LongTensor(masked_tokens), torch.LongTensor(tokens)
