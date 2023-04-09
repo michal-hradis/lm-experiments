@@ -5,9 +5,12 @@ import torch
 import json
 import typing
 import time
+import numpy as np
 from torch.utils.tensorboard import SummaryWriter
+from diff_print import console_transcription_errors
 
-class TrainingLoop:
+    
+class LearningLoop:
     @staticmethod
     def add_params(parser: argparse.ArgumentParser):
         parser.add_argument('--name', required=True, help='Name for tensorboard.')
@@ -21,29 +24,30 @@ class TrainingLoop:
         parser.add_argument('--optimization-config', default='{"type":"Adam"}')
         parser.add_argument('--learning-rate', default=0.0003, type=float)
         parser.add_argument('--batch-size', default=16, type=int)
+        parser.add_argument('--warmup-iterations', default=500, type=int)
 
         parser.add_argument('-i', '--in-checkpoint', type=str)
         parser.add_argument('-o', '--out-checkpoint', type=str)
         parser.add_argument('-d', '--checkpoint-dir', default='.', type=str)
-        parser.add_argument('--warmup-iterations', default=500, type=int)
 
         parser.add_argument('--mixed-precision', action='store_true')
         return parser
 
-    def __init__(self, args: argparse.Namespace, model, loss, metrics: {}, optim_params: typing.List, trn_dataset, val_datasets):
+    def __init__(self, args: argparse.Namespace, model, loss, metrics: {}, trn_dataset, val_datasets, tokenizer):
         self.args = args
         self.model = model
         self.loss = loss
         self.metrics = metrics
-        self.onnx_export = args.onnx_export
+        self.tokenizer = tokenizer
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         logging.info(f'DEVICE {self.device}')
 
         self.trn_dataset = trn_dataset
         self.val_datasets = val_datasets
+        print(args.batch_size)
         self.trn_loader = torch.utils.data.DataLoader(trn_dataset, batch_size=args.batch_size, shuffle=True,
-                                                      num_workers=6, pin_memory=True)
+                                                      num_workers=0, pin_memory=True, drop_last=True)
 
         self.start_iteration = args.start_iteration
         self.iteration = args.start_iteration
@@ -68,11 +72,11 @@ class TrainingLoop:
         del optim_config['type']
 
         if optim_type == 'adam':
-            self.optimizer = torch.optim.Adam(optim_params, lr=args.learning_rate, **optim_config)
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=args.learning_rate, **optim_config)
         elif optim_type == 'adamw':
-            self.optimizer = torch.optim.AdamW(optim_params, lr=args.learning_rate, **optim_config)
+            self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=args.learning_rate, **optim_config)
         elif optim_type == 'sgd':
-            self.optimizer = torch.optim.SGD(optim_params, lr=args.learning_rate, **optim_config)
+            self.optimizer = torch.optim.SGD(self.model.parameters(), lr=args.learning_rate, **optim_config)
         else:
             raise ValueError(f'Unknown optimizer type {optim_type}')
 
@@ -107,24 +111,24 @@ class TrainingLoop:
                     lr = self.args.learning_rate * (self.iteration - self.start_iteration) / self.args.warmup_iterations
                     self.change_lr(lr)
 
+                # the data shape is (batch_size, 1, seq_len)
                 with torch.no_grad():
                     batch_data = batch[0].to(self.device, non_blocking=True).long()
                     batch_labels = batch[1].to(self.device, non_blocking=True).long()
-
 
                 self.iteration += 1
                 net_t1 = time.time()
                 self.optimizer.zero_grad()
                 if self.scaler:
                     with torch.cuda.amp.autocast():
-                        output = self.model(batch_data, batch_labels)
+                        output = self.model(batch_data, batch_labels)[0]
                         trn_loss = self.loss(output, batch_labels)
                         trn_loss = torch.mean(trn_loss)
                     self.scaler.scale(trn_loss).backward()
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
                 else:
-                    output = self.model(batch_data, batch_labels)
+                    output = self.model(batch_data)[0]
                     trn_loss = self.loss(output, batch_labels)
                     trn_loss = torch.mean(trn_loss)
                     trn_loss.backward()
@@ -148,11 +152,10 @@ class TrainingLoop:
                     torch.save(self.model.state_dict(), checkpoint_path)
 
                     logging.info(f"ITERATION {self.iteration}")
-                    net_speed = (self.view_step * batch_data.shape[0] * batch_data.shape[2] * batch_data.shape[3]) \
-                                / total_net_time
-                    fps = self.view_step * batch_data.shape[0] / total_net_time
-                    trn_loss_acc /= self.view_step
-                    trn_iou_acc /= self.view_step
+                    net_speed = (len(trn_loss_list) * batch_data.shape[0] * batch_data.shape[1] ) \
+                                / np.sum(train_time_list)
+                    fps = len(trn_loss_list) * batch_data.shape[0] / step_time
+                    trn_loss_acc = np.mean(trn_loss_list)
 
                     print(
                         f"TRAIN {self.iteration} loss:{trn_loss_acc:.3f} time:{step_time:.1f} fps::{fps:.1f} net_speed:{int(net_speed)}")
@@ -160,12 +163,42 @@ class TrainingLoop:
                     for dataset in [self.trn_dataset] + self.val_datasets:
                         self.test_model(dataset)
 
-                    total_net_time = 0
-                    trn_loss_acc = 0
-                    trn_iou_acc = 0
-
+                    trn_loss_list = []
+                    train_time_list = []
                     start_iter_time = time.time()
 
     def test_model(self, dataset):
-        pass
+        self.model.eval()
+        all_loss = []
+        with torch.no_grad():
+            loader = torch.utils.data.DataLoader(dataset, batch_size=8, shuffle=False, num_workers=0, pin_memory=True, drop_last=True)
+            for i, batch in enumerate(loader):
+                batch_data = batch[0].to(self.device, non_blocking=True).long()
+                batch_labels = batch[1].to(self.device, non_blocking=True).long()
+
+                output = self.model(batch_data)[0]
+                loss = self.loss(output, batch_labels)
+                all_loss.append(loss.cpu().item())
+                if i == 0:
+                    for gt, t, o, i in zip(batch_labels, batch_data, output.cpu().numpy(), range(32)):
+                        #print('GT: ', [self.tokenizer.IdToPiece(i) for i in gt.cpu().numpy().tolist()])
+                        #print('INPUT: ', [self.tokenizer.IdToPiece(i) for i in t.cpu().numpy().tolist()])
+                        gt = self.tokenizer.DecodeIds(gt.cpu().numpy().tolist())
+                        print('GT:      ', gt)
+                        t = self.tokenizer.DecodeIds(t.cpu().numpy().tolist())
+                        o = self.tokenizer.DecodeIds(np.argmax(o, axis=1).tolist())
+                        print('INPUT:   ', console_transcription_errors(t, gt))
+                        print('OUTPUT:  ', console_transcription_errors(o, gt))
+                        print('CHANGES: ', console_transcription_errors(o, t))
+                        print()
+              
+                if i > 10:
+                    break
+        self.model.train()
+
+        loss = np.mean(all_loss)
+        if self.tb_writer:
+            self.tb_writer.add_scalar(f'Loss_val/{dataset.name}', loss, self.iteration)
+
+        print(f"TEST {dataset.name} loss:{loss:.3f}")
 

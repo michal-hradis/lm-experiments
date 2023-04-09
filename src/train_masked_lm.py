@@ -56,7 +56,7 @@ def main():
     METRICS = {'accuracy': Accuracy()}
 
     learning_loop = LearningLoop(args, model, loss=LOSS, metrics=METRICS, trn_dataset=dataset_trn,
-                                 val_datasets=dataset_tst)
+                                 val_datasets=dataset_tst, tokenizer=tokenizer)
     learning_loop.run_training()
 
 

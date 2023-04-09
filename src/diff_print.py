@@ -165,7 +165,7 @@ def levenshtein_alignment_substring(source, target, sub_cost=1, ins_cost=1, del_
 from sty  import fg
 red = lambda text: fg.red + text + fg.white
 green = lambda text: fg.green + text + fg.white
-blue = lambda text: fg.blue +text + fg.white
+blue = lambda text: fg.yellow + text + fg.white
 white = lambda text: text
 
 def get_edits_string(old, new):
@@ -189,7 +189,6 @@ def console_transcription_errors(transcription, ground_truth, missing_char="_"):
     source_transcription = ""
     last_string = []
     operation = 'match' # match, insert, delete, replace
-    print(alignment)
     for pair in alignment + [(None, None)]: # add a dummy pair to flush the last string
         source_char, target_char = pair
 

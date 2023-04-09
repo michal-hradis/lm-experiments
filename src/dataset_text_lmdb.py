@@ -14,7 +14,7 @@ class TextDatasetLMDB(Dataset):
     The dataset returns a tensor of token ids for the document. Token sequence is randomly cropped or padded to max_len.
     """
 
-    def __init__(self, lmdb_path, sp_model_path, max_len=512, compressed=True, mask_prob=0.15, mask_whole_words=True, mask_token_id=3, random_token_prob=0.1):
+    def __init__(self, lmdb_path, sp_model_path, max_len=512, compressed=True, mask_prob=0.2, mask_whole_words=True, mask_token_id=3, random_token_prob=0.1):
         self.mask_prob = mask_prob
         self.mask_whole_words = mask_whole_words
         self.mask_token_id = mask_token_id
@@ -68,6 +68,7 @@ class TextDatasetLMDB(Dataset):
 
         # mask whole words
         masked_tokens = np.random.choice(len(word_start_positions), size=int(len(word_start_positions) * self.mask_prob + 0.5), replace=False)
+        masked_tokens = sorted(masked_tokens)
         for start in masked_tokens:
             pos = word_start_positions[start]
             if start < len(word_start_positions) - 1:
@@ -75,7 +76,7 @@ class TextDatasetLMDB(Dataset):
             else:
                 end = len(tokens)
             for i in range(pos, end):
-                if np.random.rand() < self.random_token_prob:
+                if np.random.rand() < 0*self.random_token_prob:
                     tokens[i] = np.random.randint(0, self.sp.GetPieceSize())
                 else:
                     tokens[i] = self.mask_token_id
@@ -110,4 +111,4 @@ class TextDatasetLMDB(Dataset):
             tokens = tokens + [0] * (self.max_len - len(tokens))
             masked_tokens = masked_tokens + [0] * (self.max_len - len(masked_tokens))
 
-        return torch.LongTensor(tokens), torch.LongTensor(masked_tokens)
+        return  torch.LongTensor(masked_tokens), torch.LongTensor(tokens),
