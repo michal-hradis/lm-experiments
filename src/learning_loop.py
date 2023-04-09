@@ -23,6 +23,7 @@ class LearningLoop:
 
         parser.add_argument('--optimization-config', default='{"type":"Adam"}')
         parser.add_argument('--learning-rate', default=0.0003, type=float)
+        parser.add_argument('--gradient-clip', default=1, type=float, help='Per-value gradinet clipping value.')
         parser.add_argument('--batch-size', default=16, type=int)
         parser.add_argument('--warmup-iterations', default=500, type=int)
 
@@ -55,6 +56,8 @@ class LearningLoop:
         self.view_step = args.view_step
         self.out_checkpoint = args.out_checkpoint
         self.checkpoint_dir = args.checkpoint_dir
+
+        self.gradient_clip = args.gradient_clip
 
         checkpoint_path = None
         if args.in_checkpoint is not None:
@@ -132,6 +135,9 @@ class LearningLoop:
                     trn_loss = self.loss(output, batch_labels)
                     trn_loss = torch.mean(trn_loss)
                     trn_loss.backward()
+                    if self.gradient_clip > 0:
+                        # torch.nn.utils.clip_grad_norm_(model.parameters(), args.gradient_clip)
+                        torch.nn.utils.clip_grad_value_(self.model.parameters(), self.gradient_clip)
                     self.optimizer.step()
 
                 trn_loss = trn_loss.item()
