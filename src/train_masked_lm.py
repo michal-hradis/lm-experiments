@@ -35,7 +35,7 @@ class CrossEntropyLoss(torch.nn.Module):
         self.mask_token_id = mask_token_id
 
     def forward(self, logits, targets):
-        loss = torch.nn.functional.cross_entropy(logits.view(-1, logits.shape[-1]), targets.view(-1), ignore_index=self.mask_token_id)
+        loss = torch.nn.functional.cross_entropy(logits.view(-1, logits.shape[-1]), targets.view(-1))
         return loss
 
 import sentencepiece as spm
