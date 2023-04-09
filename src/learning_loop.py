@@ -204,15 +204,15 @@ class LearningLoop:
                 all_loss.append(loss.cpu().item())
                 if i == 0:
                     for gt, input, output, i in zip(batch_labels, batch_data, output.cpu().numpy(), range(32)):
-                        gt = gt[:128]
-                        input = input[:128]
+                        gt = gt[:128].cpu().numpy()
+                        input = input[:128].cpu().numpy()
                         output = output[:128]
-                        gt = self.tokenizer.DecodeIds(gt.cpu().numpy().tolist())
+                        gt = self.tokenizer.DecodeIds(gt.tolist())
                         print('GT:      ', gt)
                         output = np.argmax(output, axis=1)
                         output[input != 3] = input[input != 3]
                         output = self.tokenizer.DecodeIds(output.tolist())
-                        input = self.tokenizer.DecodeIds(input.cpu().numpy().tolist())
+                        input = self.tokenizer.DecodeIds(input.tolist())
                         print('INPUT:   ', console_transcription_errors(input, gt))
                         print('OUTPUT:  ', console_transcription_errors(output, gt))
                         print('CHANGES: ', console_transcription_errors(output, input))
