@@ -2,29 +2,39 @@ import torch
 import copy
 
 
-class CausalConvBlock(torch.nn.Module):
-    def __init__(self, model_dim):
-        super(CausalConvBlock, self).__init__()
+class ConvBlock(torch.nn.Module):
+    def __init__(self, model_dim, causal=False):
+        super(ConvBlock, self).__init__()
 
         self.kernel_size = 5
         self.dilation = 1
         self.groups = 1
         self.model_dim = model_dim
-        self.layer1 = torch.nn.Conv1d(model_dim, model_dim, self.kernel_size,
-                                     stride=1, dilation=self.dilation, groups=1,
-                                     padding=(self.kernel_size - 1) * self.dilation)
+        self.causal = causal
+        if self.causal:
+            self.layer1 = torch.nn.Conv1d(model_dim, model_dim, self.kernel_size,
+                                         stride=1, dilation=self.dilation, groups=1,
+                                         padding=(self.kernel_size - 1) * self.dilation)
 
-        self.layer2 = torch.nn.Conv1d(model_dim, model_dim, self.kernel_size,
-                                     stride=1, dilation=self.dilation, groups=1,
-                                     padding=(self.kernel_size - 1) * self.dilation)
+            self.layer2 = torch.nn.Conv1d(model_dim, model_dim, self.kernel_size,
+                                         stride=1, dilation=self.dilation, groups=1,
+                                         padding=(self.kernel_size - 1) * self.dilation)
+        else:
+            self.layer1 = torch.nn.Conv1d(model_dim, model_dim, self.kernel_size,
+                                         stride=1, dilation=self.dilation, groups=1,
+                                         padding=(self.kernel_size - 1) * self.dilation // 2)
+
+            self.layer2 = torch.nn.Conv1d(model_dim, model_dim, self.kernel_size,
+                                         stride=1, dilation=self.dilation, groups=1,
+                                         padding=(self.kernel_size - 1) * self.dilation // 2)
 
     def forward(self, x):
         x = self.layer1(x)
         x = torch.nn.functional.relu(x, inplace=True)
-        x = x[:, :, 0:-(self.kernel_size-1)*self.dilation]
+        x = x[:, :, 0:-(self.kernel_size-1)*self.dilation] if self.causal else x
         x = self.layer2(x)
         x = torch.nn.functional.relu(x, inplace=True)
-        x = x[:, :, 0:-(self.kernel_size-1)*self.dilation]
+        x = x[:, :, 0:-(self.kernel_size-1)*self.dilation] if self.causal else x
         return x
 
 

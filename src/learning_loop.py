@@ -49,7 +49,7 @@ class LearningLoop:
         self.val_datasets = val_datasets
         print(args.batch_size)
         self.trn_loader = torch.utils.data.DataLoader(trn_dataset, batch_size=args.batch_size, shuffle=True,
-                                                      num_workers=0, pin_memory=True, drop_last=True)
+                                                      num_workers=6, pin_memory=True, drop_last=True)
 
         self.start_iteration = args.start_iteration
         self.iteration = args.start_iteration
@@ -139,7 +139,7 @@ class LearningLoop:
                     if isinstance(output, tuple):
                         output, counts, route_prob, n_dropped, route_prob_max = output
                         trn_loss = torch.mean(self.loss(output, batch_masked_labels))
-                        load_balancing_loss = self.model.module.load_balancing_loss(counts, route_prob)
+                        load_balancing_loss = self.model.load_balancing_loss(counts, route_prob)
                         print(f'trn_loss: {trn_loss.item()}, load balancing loss: {load_balancing_loss.item()}, dropped: {n_dropped}')
                         trn_loss += 0.01 * load_balancing_loss
                     else:

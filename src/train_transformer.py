@@ -3,11 +3,11 @@
 
 import sentencepiece as spm
 import numpy as np
-import torch
+
 import argparse
 import math
 import time
-from conv_nets import ResidualConvBlock, ConvStack, CausalConvBlock
+import torch
 
 
 def parseargs():
@@ -39,118 +39,6 @@ def parseargs():
     return args
 
 
-class PositionalEncoding(torch.nn.Module):
-    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 4096):
-        super().__init__()
-        self.dropout = torch.nn.Dropout(p=dropout)
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-        pe = torch.zeros(max_len, 1, d_model)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            x: Tensor, shape [seq_len, batch_size, embedding_dim]
-        """
-        x = x + self.pe[:x.size(0)]
-        return self.dropout(x)
-
-
-class TextConvModel(torch.nn.Module):
-    def __init__(self, token_count, model_dim=512, layers=6):
-        super(TextConvModel, self).__init__()
-
-        self.token_count = token_count
-        self.model_dim = model_dim
-        self.layers = layers
-
-        self.embed = torch.nn.Embedding(token_count, embedding_dim=self.model_dim)
-
-        module = ResidualConvBlock(self.model_dim, CausalConvBlock(self.model_dim))
-        self.model = ConvStack(module, self.layers)
-
-        self.decoder = torch.nn.Linear(
-            in_features=self.model_dim,
-            out_features=self.token_count,
-            bias=True)
-
-    def forward(self, input_chars):
-        emb = self.embed(input_chars)
-        output = self.model(emb)
-        logits = self.decoder(output)
-        log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
-        return log_probs
-
-
-class TextTransformer(torch.nn.Module):
-    def __init__(self, token_count, model_dim=512, head_count=8, layers=6, start_conv=0, end_conv=0, dropout=0.1):
-        super(TextTransformer, self).__init__()
-
-        self.token_count = token_count
-        self.model_dim = model_dim
-        self.head_count = head_count
-        self.layers = layers
-
-        self.src_mask = generate_square_subsequent_mask(1024).to('cuda')
-        self.embed = torch.nn.Embedding(token_count, embedding_dim=self.model_dim)
-
-        if start_conv:
-            module = ResidualConvBlock(self.model_dim, CausalConvBlock(self.model_dim))
-            self.start_conv = ConvStack(module, start_conv)
-        else:
-            self.start_conv = None
-
-        self.position_encoder = PositionalEncoding(d_model=self.model_dim, dropout=0.025, max_len=1024)
-        if experts < 2:
-            encoder_layer = torch.nn.TransformerEncoderLayer(d_model=self.model_dim, nhead=self.head_count, dim_feedforward=self.model_dim*4, dropout=dropout,, batch_first=True)
-        else:
-            encoder_layer = torch.nn.TransformerEncoderLayer(d_model=self.model_dim, nhead=self.head_count,
-                                                             dim_feedforward=self.model_dim * 4, dropout=dropout, ,
-                                                             batch_first=True)
-
-        self.model = torch.nn.TransformerEncoder(encoder_layer, num_layers=self.layers)
-
-        if end_conv:
-            module = ResidualConvBlock(self.model_dim, CausalConvBlock(self.model_dim))
-            self.end_conv = ConvStack(module, end_conv)
-        else:
-            self.end_conv = None
-
-        self.decoder = torch.nn.Linear(
-            in_features=self.model_dim,
-            out_features=self.token_count,
-            bias=True)
-
-        self.init_weights()
-
-    def init_weights(self) -> None:
-        pass
-        #initrange = 0.002
-        #self.embed.weight.data.uniform_(-initrange, initrange)
-        #self.decoder.bias.data.zero_()
-        #self.decoder.weight.data.uniform_(-initrange, initrange)
-
-    def forward(self, input_chars):
-        emb = self.embed(input_chars)
-        if self.start_conv:
-            emb = self.start_conv(emb)
-        emb = self.position_encoder(emb)
-        output = self.model(emb, self.src_mask[:emb.shape[1], :emb.shape[1]])
-        if self.end_conv:
-            output = self.end_conv(output)
-        logits = self.decoder(output)
-
-        log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
-        return log_probs
-
-def generate_square_subsequent_mask(sz: int) -> torch.Tensor:
-    """Generates an upper-triangular matrix of -inf, with zeros on diag."""
-    return torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1)
-
-
 def sample_characters(model, input_chars, char_count=100, temperature=1.0):
     sampled_chars = []
     with torch.no_grad():
@@ -176,66 +64,6 @@ def print_samples(seed_text_ids, model, vocabulary):
     model.train()
 
 
-def build_switch_transformer(model_dim, head_count, layers, n_experts):
-    from labml_nn.transformers.switch import SwitchTransformer, SwitchTransformerLayer, SwitchFeedForward
-    from labml_nn.transformers import MultiHeadAttention
-    from labml_nn.transformers.feed_forward import FeedForward
-    d_model = model_dim
-    heads = head_count
-    dropout = 0.1
-    capacity_factor = 1.2
-    drop_tokens = True
-    is_scale_prob = True
-    expert = FeedForward(d_model, d_model * 2 , dropout)
-    n_layers = layers
-    return SwitchTransformer(
-        SwitchTransformerLayer(d_model=d_model,
-                               attn=MultiHeadAttention(heads, d_model, dropout),
-                               feed_forward=SwitchFeedForward(capacity_factor=capacity_factor,
-                                                              drop_tokens=drop_tokens,
-                                                              is_scale_prob=is_scale_prob,
-                                                              n_experts=n_experts,
-                                                              expert=FeedForward(d_model, d_model*2, dropout),
-                                                              d_model=d_model),
-                               dropout_prob=dropout),
-        n_layers)
-
-
-class TextSwitchTransformer(torch.nn.Module):
-    def __init__(self, token_count, model_dim, head_count, layers, n_experts):
-        super(TextSwitchTransformer, self).__init__()
-
-        self.token_count = token_count
-        self.model_dim = model_dim
-        self.head_count = head_count
-        self.layers = layers
-        self.n_experts = n_experts
-
-        from labml_nn.transformers.utils import subsequent_mask
-        self.src_mask = subsequent_mask(1024).to('cuda')
-
-        self.embed = torch.nn.Embedding(token_count, embedding_dim=self.model_dim)
-
-        self.position_encoder = PositionalEncoding(d_model=self.model_dim, dropout=0.025, max_len=1024)
-
-        self.model = build_switch_transformer(self.model_dim, self.head_count, self.layers, self.n_experts)
-
-        self.decoder = torch.nn.Linear(
-            in_features=self.model_dim,
-            out_features=self.token_count,
-            bias=True)
-
-
-    def forward(self, input_chars):
-        emb = self.embed(input_chars)
-        emb = self.position_encoder(emb)
-        emb = torch.transpose(emb, 0, 1)
-        #print(emb.shape, self.src_mask[:emb.shape[1], :emb.shape[1]].shape)
-        output, f, p, n_d, p_max = self.model(emb, self.src_mask[:emb.shape[0], :emb.shape[0]])
-        output = torch.transpose(output, 0, 1)
-        logits = self.decoder(output)
-        log_probs = torch.nn.functional.log_softmax(logits, dim=-1)
-        return log_probs, f, p, n_d, p_max
 
 
 def main():

@@ -2,10 +2,11 @@ import numpy as np
 import argparse
 
 
+
 def parseargs():
     parser = argparse.ArgumentParser('Convert text file with piece ids to numpy array.')
-    parser.add_argument('-i', '--input', required=True, help='File wit piece ids to process.')
-    parser.add_argument('-o', '--output', required=True, help='Output file.')
+    parser.add_argument('-i', '--input', required=True, help='File with piece ids to process.')
+    parser.add_argument('-o', '--output', required=True, help='Output lmdb directory.')
     args = parser.parse_args()
     return args
 
