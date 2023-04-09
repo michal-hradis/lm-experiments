@@ -1,10 +1,7 @@
 import json
-import torch
 import logging
 from swith_transformer import TextSwitchTransformer
-
-
-
+from model_transformer import TextTransformer
 
 
 def net_factory(config, token_count):
@@ -12,8 +9,8 @@ def net_factory(config, token_count):
         config = json.loads(config)
     if config['type'].lower() == 'transformer':
         del config['type']
-        model = Transformer(token_count=token_count, **config)
-    if config['type'].lower() == 'switch_transformer':
+        model = TextTransformer(token_count=token_count, **config)
+    elif config['type'].lower() == 'switch_transformer':
         del config['type']
         model = TextSwitchTransformer(token_count=token_count, **config)
     else:
