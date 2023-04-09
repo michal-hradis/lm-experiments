@@ -165,22 +165,8 @@ def levenshtein_alignment_substring(source, target, sub_cost=1, ins_cost=1, del_
 from sty  import fg
 red = lambda text: fg.red + text + fg.white
 green = lambda text: fg.green + text + fg.white
-blue = lambda text: fg.yellow + text + fg.white
+blue = lambda text: fg.blue + text + fg.white
 white = lambda text: text
-
-def get_edits_string(old, new):
-    result = ""
-    codes = difflib.SequenceMatcher(a=old, b=new).get_opcodes()
-    for code in codes:
-        if code[0] == "equal":
-            result += white(old[code[1]:code[2]])
-        elif code[0] == "delete":
-            result += red(old[code[1]:code[2]])
-        elif code[0] == "insert":
-            result += green(new[code[3]:code[4]])
-        elif code[0] == "replace":
-            result += (red(old[code[1]:code[2]]) + green(new[code[3]:code[4]]))
-    return result
 
 
 def console_transcription_errors(transcription, ground_truth, missing_char="_"):
@@ -205,16 +191,16 @@ def console_transcription_errors(transcription, ground_truth, missing_char="_"):
             if operation == 'match':
                 source_transcription += ''.join(last_string)
             elif operation == 'insert':
-                source_transcription += green(''.join(last_string))
+                source_transcription += blue(''.join(last_string))
             elif operation == 'delete':
                 source_transcription += red(''.join(last_string))
             elif operation == 'replace':
-                source_transcription += blue(''.join(last_string))
+                source_transcription += green(''.join(last_string))
             last_string = []
         operation = current_operation
-        if source_char is None:
-            source_char = "_"
-        last_string.append(source_char)
+
+        char_to_add = source_char if source_char is not None else target_char
+        last_string.append(char_to_add)
 
     return source_transcription
 
