@@ -1,6 +1,6 @@
 import torch
-from conv_nets import ResidualConvBlock, ConvStack, ConvBlock
-from src.models.model_common import PositionalEncoding
+from models.conv_nets import ResidualConvBlock, ConvStack, ConvBlock
+from models.model_common import PositionalEncoding
 
 
 def compute_conv1DTransposed_output_size(input_size, kernel_size, stride, padding, dilation, output_padding):
@@ -19,7 +19,7 @@ class TransformerBackbone(torch.nn.Module):
         self.start_stage = start_stage
 
         self.positional_encoders = [
-            PositionalEncoding(d_model=self.base_dims * 2 ** stage, dropout=dropout, max_len=512)
+            PositionalEncoding(d_model=self.base_dims * 2 ** stage, dropout=dropout, max_len=512).cuda()
             for stage in range(start_stage, self.stage_count)]
 
         self.stage_modules = []
@@ -130,7 +130,7 @@ class TextTransformerMultiscale(torch.nn.Module):
         self.src_mask = torch.zeros((1024, 1024))  # .to('cuda')
         self.embed = torch.nn.Embedding(token_count, embedding_dim=self.base_dims)
         if start_conv:
-            module = ResidualConvBlock(self.model_dim, ConvBlock(self.model_dim, causal=False))
+            module = ResidualConvBlock(self.base_dims, ConvBlock(self.base_dims, causal=False))
             self.start_conv = ConvStack(module, start_conv)
         else:
             self.start_conv = None
@@ -139,7 +139,7 @@ class TextTransformerMultiscale(torch.nn.Module):
         self.neck = TransformerNeck(base_dims=base_dims, base_heads=base_heads, stage_layers=stage_layers, stage_count=4, stage_subsampling=stage_subsampling, dropout=dropout)
 
         if end_conv:
-            module = ResidualConvBlock(self.model_dim, ConvBlock(self.model_dim, causal=False))
+            module = ResidualConvBlock(self.base_dims, ConvBlock(self.base_dims, causal=False))
             self.end_conv = ConvStack(module, end_conv)
         else:
             self.end_conv = None
