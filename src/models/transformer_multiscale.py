@@ -19,7 +19,7 @@ class TransformerBackbone(torch.nn.Module):
         self.start_stage = start_stage
 
         self.positional_encoders = [
-            PositionalEncoding(d_model=self.base_dims * 2 ** stage, dropout=dropout, max_len=512).cuda()
+            PositionalEncoding(d_model=self.base_dims * 2 ** stage, dropout=dropout, max_len=512)#.cuda()
             for stage in range(start_stage, self.stage_count)]
 
         self.stage_modules = []
@@ -126,7 +126,7 @@ class TextTransformerMultiscale(torch.nn.Module):
         self.stage_count = stage_count
         self.dropout = dropout
 
-        self.src_mask = torch.zeros((1024, 1024)).to('cuda')
+        self.src_mask = torch.zeros((1024, 1024))#.to('cuda')
         self.embed = torch.nn.Embedding(token_count, embedding_dim=self.base_dims)
         if start_conv:
             module = ResidualConvBlock(self.base_dims, ConvBlock(self.base_dims, causal=False))
@@ -164,11 +164,18 @@ def main():
     token_count = 256
     model = TextTransformerMultiscale(
         token_count=token_count,
-        base_dims=64, base_heads=2, stage_layers=2, stage_count=1, stage_subsampling=4, start_conv=2, end_conv=2, dropout=0.025)
+        base_dims=64, base_heads=2, stage_layers=2, stage_count=2, stage_subsampling=4, start_conv=2, end_conv=2, dropout=0.025)
+
+
     print(model)
     x = torch.randint(0, token_count, (2, 256))
     y = model(x)
-    print(y.shape, x.shape)
+    # print output statistics like mean and standard deviation
+    print(y.mean(), y.std())
+
+    # go through all model parameters and print their names and value statistics
+    for name, param in model.named_parameters():
+        print(name, param.shape, param.mean().item(), param.std().item())
 
 
 if __name__ == '__main__':
