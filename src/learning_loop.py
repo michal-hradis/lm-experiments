@@ -76,12 +76,14 @@ class LearningLoop:
         optim_type = optim_config['type'].lower()
         del optim_config['type']
 
+        params = self.model.parameters()
+        #params = self.model.decoder.parameters()
         if optim_type == 'adam':
-            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=args.learning_rate, **optim_config)
+            self.optimizer = torch.optim.Adam(params, lr=args.learning_rate, **optim_config)
         elif optim_type == 'adamw':
-            self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=args.learning_rate, **optim_config)
+            self.optimizer = torch.optim.AdamW(params, lr=args.learning_rate, **optim_config)
         elif optim_type == 'sgd':
-            self.optimizer = torch.optim.SGD(self.model.parameters(), lr=args.learning_rate, **optim_config)
+            self.optimizer = torch.optim.SGD(params, lr=args.learning_rate, **optim_config)
         else:
             raise ValueError(f'Unknown optimizer type {optim_type}')
 
@@ -155,6 +157,20 @@ class LearningLoop:
 
                 trn_loss = trn_loss.item()
                 trn_loss_list.append(trn_loss)
+                # print parameter value statistics for all layers
+                if self.iteration % 100 == 0:
+                    for name, param in self.model.named_parameters():
+                            # print with 4 decimal places and 2 leading spaces to account for the sign
+                            print(f'mean: {param.mean().item():6.4f}, std: {param.std().item():6.4f}, max: {param.max().item():6.4f}, min: {param.min().item():6.4f}, {str(param.shape):>10}, {name}')
+
+                #embedding = list(self.model.embed.parameters())[0]
+                #grad = embedding.grad
+                #embedding = embedding.detach()
+                #7last_weights = list(self.model.decoder.parameters())[0].detach()
+
+                #print('VALUES:', ' '.join([f'{x.item():.4f}' for x in embedding[3, :12].cpu().numpy()]))
+                #print('GRAD: ', ' '.join([f'{x.item():.4f}' for x in grad[3, :12].cpu().numpy()]))
+                #print(f'grad shape: {grad.shape}, mean: {grad.mean().item()}, std: {grad.std().item()}, max: {grad.max().item()}, min: {grad.min().item()}')
 
 
 
