@@ -136,6 +136,7 @@ class TextMultiscaleConvNetwork(torch.nn.Module):
         features = self.encoder(x)
         x = self.decoder(features)
         x = x.permute(0, 2, 1)
+        x = self.output_layer(x)
 
         return x
 
