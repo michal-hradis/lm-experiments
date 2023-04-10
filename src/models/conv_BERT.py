@@ -61,6 +61,7 @@ class ConvEncoder(torch.nn.Module):
         self.channel_expansion_layers = []
         for i in range(self.stage_count - 1):
             self.channel_expansion_layers.append(torch.nn.Conv1d(self.base_dims * 2 ** i, self.base_dims * 2 ** (i + 1), 1))
+        self.channel_expansion_layers = torch.nn.ModuleList(self.channel_expansion_layers)
 
     def forward(self, x):
         features = []
