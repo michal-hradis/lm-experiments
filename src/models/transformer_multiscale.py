@@ -91,7 +91,6 @@ class TransformerNeck(torch.nn.Module):
 
                 stage = torch.nn.ModuleList([transformer, norm, activation, conv_upsample_squeeze])
             self.stage_modules.append(stage)
-        print(self.stage_modules)
         self.stage_modules = torch.nn.ModuleList(self.stage_modules)
 
     def forward(self, encoder_features):
@@ -127,7 +126,7 @@ class TextTransformerMultiscale(torch.nn.Module):
         self.stage_count = stage_count
         self.dropout = dropout
 
-        self.src_mask = torch.zeros((1024, 1024))  # .to('cuda')
+        self.src_mask = torch.zeros((1024, 1024)).to('cuda')
         self.embed = torch.nn.Embedding(token_count, embedding_dim=self.base_dims)
         if start_conv:
             module = ResidualConvBlock(self.base_dims, ConvBlock(self.base_dims, causal=False))
@@ -135,8 +134,8 @@ class TextTransformerMultiscale(torch.nn.Module):
         else:
             self.start_conv = None
 
-        self.backbone = TransformerBackbone(base_dims=base_dims, base_heads=base_heads, stage_layers=stage_layers, stage_count=4, stage_subsampling=stage_subsampling, dropout=dropout)
-        self.neck = TransformerNeck(base_dims=base_dims, base_heads=base_heads, stage_layers=stage_layers, stage_count=4, stage_subsampling=stage_subsampling, dropout=dropout)
+        self.backbone = TransformerBackbone(base_dims=base_dims, base_heads=base_heads, stage_layers=stage_layers, stage_count=stage_count, stage_subsampling=stage_subsampling, dropout=dropout)
+        self.neck = TransformerNeck(base_dims=base_dims, base_heads=base_heads, stage_layers=stage_layers, stage_count=stage_count, stage_subsampling=stage_subsampling, dropout=dropout)
 
         if end_conv:
             module = ResidualConvBlock(self.base_dims, ConvBlock(self.base_dims, causal=False))
@@ -165,7 +164,7 @@ def main():
     token_count = 256
     model = TextTransformerMultiscale(
         token_count=token_count,
-        base_dims=64, base_heads=2, stage_layers=2, stage_count=4, stage_subsampling=4, start_conv=0, end_conv=0, dropout=0.025)
+        base_dims=64, base_heads=2, stage_layers=2, stage_count=1, stage_subsampling=4, start_conv=2, end_conv=2, dropout=0.025)
     print(model)
     x = torch.randint(0, token_count, (2, 256))
     y = model(x)
