@@ -54,7 +54,7 @@ class ConvEncoder(torch.nn.Module):
         self.stages = []
         for i in range(self.stage_count):
             stage = PureConvBlock(self.base_dims * 2 ** i, self.base_dims * 2 ** i * self.expansion_factor, groups=self.groups, kernel_size=kernel_size)
-            stage = _get_clones(ResidualConvBlock(self.base_dims * 2 ** i, stage), stage_count)
+            stage = _get_clones(ResidualConvBlock(self.base_dims * 2 ** i, stage), self.stage_layers)
             stage = torch.nn.Sequential(*stage)
             self.stages.append(stage)
         self.stages = torch.nn.ModuleList(self.stages)
@@ -90,7 +90,7 @@ class ConvDecoder(torch.nn.Module):
         self.stages = []
         for i in range(self.stage_count - 1):
             stage = PureConvBlock(self.base_dims * 2 ** i, self.base_dims * 2 ** i * self.expansion_factor, groups=self.groups, kernel_size=kernel_size)
-            stage = _get_clones(ResidualConvBlock(self.base_dims * 2 ** i, stage), stage_count)
+            stage = _get_clones(ResidualConvBlock(self.base_dims * 2 ** i, stage), self.stage_layers)
             stage = torch.nn.Sequential(*stage)
             self.stages.append(stage)
         self.stages = torch.nn.ModuleList(self.stages)
@@ -161,7 +161,7 @@ class TextConvNetwork(torch.nn.Module):
             self.embed.weight.data *= 0.01
         stage = PureConvBlock(self.base_dims, self.expansion_dims, groups=self.groups, kernel_size=kernel_size)
         stage = ResidualConvBlock(self.base_dims, stage)
-        self.stages = _get_clones(stage, self.stage_count)
+        self.stages = _get_clones(stage, self.stage_layers)
 
         self.decoder = torch.nn.Linear(
             in_features=self.base_dims,
