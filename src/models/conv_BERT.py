@@ -128,15 +128,18 @@ class TextMultiscaleConvNetwork(torch.nn.Module):
             self.embed.weight.data *= 0.01
         self.encoder = ConvEncoder(base_dims=self.base_dims, expansion_factor=expansion_factor, groups=groups, kernel_size=kernel_size, stage_count=stage_count, stage_subsampling=stage_subsampling, stage_layers=stage_layers, dropout=dropout)
         self.decoder = ConvDecoder(base_dims=self.base_dims, expansion_factor=expansion_factor, groups=groups, kernel_size=kernel_size, stage_count=stage_count, stage_subsampling=stage_subsampling, stage_layers=stage_layers, dropout=dropout)
-        self.output_layer = torch.nn.Conv1d(self.base_dims, self.token_count, 1)
+        self.output_layer = torch.nn.Linear(
+            in_features=self.base_dims,
+            out_features=self.token_count,
+            bias=True)
 
     def forward(self, x):
         x = self.embed(x)
         x = x.permute(0, 2, 1)
         features = self.encoder(x)
         x = self.decoder(features)
-        x = self.output_layer(x)
         x = x.permute(0, 2, 1)
+        x = self.output_layer(x)
 
         return x
 
