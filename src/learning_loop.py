@@ -8,13 +8,15 @@ import time
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 from diff_print import console_transcription_errors
+from autoregressive_sampling import sample_characters
+import  diff_print
 
     
 class LearningLoop:
     @staticmethod
     def add_params(parser: argparse.ArgumentParser):
         parser.add_argument('--name', required=True, help='Name for tensorboard.')
-        parser.add_argument('--tensorboard-path', help='Path for tensorboard logs.')
+        parser.add_argument('--tensorboard-path', default='./tb_log/', help='Path for tensorboard logs.')
         parser.add_argument('-g', '--gpu-id', type=int,
                             help="If not set setGPU() is called. Set this to 0 on desktop. Leave it empty on SGE.")
         parser.add_argument('--start-iteration', default=0, type=int)
@@ -49,7 +51,7 @@ class LearningLoop:
         self.val_datasets = val_datasets
         print(args.batch_size)
         self.trn_loader = torch.utils.data.DataLoader(trn_dataset, batch_size=args.batch_size, shuffle=True,
-                                                      num_workers=6, pin_memory=True, drop_last=True)
+                                                      num_workers=0, pin_memory=True, drop_last=True)
 
         self.start_iteration = args.start_iteration
         self.iteration = args.start_iteration
@@ -123,7 +125,8 @@ class LearningLoop:
                     batch_data = batch[0].to(self.device, non_blocking=True).long()
                     batch_labels = batch[1].to(self.device, non_blocking=True).long()
                     batch_masked_labels = batch_labels.clone()
-                    batch_masked_labels[batch_data != 3] = 0
+                    if not self.trn_dataset.causal:
+                        batch_masked_labels[batch_data != 3] = 0
 
                 self.iteration += 1
                 net_t1 = time.time()
@@ -213,7 +216,8 @@ class LearningLoop:
                 batch_data = batch[0].to(self.device, non_blocking=True).long()
                 batch_labels = batch[1].to(self.device, non_blocking=True).long()
                 batch_masked_labels = batch_labels.clone()
-                batch_masked_labels[batch_data != 3] = 0
+                if not dataset.causal:
+                    batch_masked_labels[batch_data != 3] = 0
 
                 output = self.model(batch_data)
                 loss = self.loss(output, batch_masked_labels)
@@ -226,13 +230,23 @@ class LearningLoop:
                         gt = self.tokenizer.DecodeIds(gt.tolist())
                         print('GT:      ', gt)
                         output = np.argmax(output, axis=1)
-                        output[input != 3] = input[input != 3]
+                        if not dataset.causal:
+                            output[input != 3] = input[input != 3]
                         output = self.tokenizer.DecodeIds(output.tolist())
                         input = self.tokenizer.DecodeIds(input.tolist())
                         print('INPUT:   ', console_transcription_errors(input, gt))
                         print('OUTPUT:  ', console_transcription_errors(output, gt))
                         print('CHANGES: ', console_transcription_errors(output, input))
                         print()
+
+                    if dataset.causal:
+                        for gt_tokens in batch_labels[:8]:
+                            # sample text from the model base on gt prefix and print it
+                            gt_tokens = gt_tokens[:16]
+                            prediction_tokens = sample_characters(self.model, gt_tokens[:16], char_count=128, temperature=1.2)
+                            prediction = self.tokenizer.DecodeIds(prediction_tokens)
+                            gt = self.tokenizer.DecodeIds(gt_tokens.tolist())
+                            print('SAMPLING: ' + diff_print.green(gt) + prediction)
                 if i > 20:
                     break
         self.model.train()
