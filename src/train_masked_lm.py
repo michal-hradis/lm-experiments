@@ -11,7 +11,8 @@ def parse_args():
     parser.add_argument('--trn-dataset', required=True)
     parser.add_argument('--tst-data', action='append', default=[])
     parser.add_argument('--sequence-length', type=int, default=256)
-    parser.add_argument('--net-config', default='{"type":"tansformer", "depth":6, "dim":"256"}')
+    parser.add_argument('--net-config', default='{"type":"transformer", "layers":2, "model_dim":128, "head_count":4}')
+    parser.add_argument('--causal', action='store_true', help='The dataset is causal, that is the input is shifted by one token to the right. This also passes causal=True to the model.')
     return parser
 
 
@@ -44,15 +45,16 @@ def main():
     parser = parse_args()
     parser = LearningLoop.add_params(parser)
     args = parser.parse_args()
-    dataset_trn = TextDatasetLMDB(args.trn_dataset, args.tokenizer, args.sequence_length)
-    dataset_tst = [TextDatasetLMDB(tst_data, args.tokenizer, args.sequence_length) for tst_data in args.tst_data]
+    dataset_trn = TextDatasetLMDB(args.trn_dataset, args.tokenizer, args.sequence_length, causal=args.causal)
+    dataset_tst = [TextDatasetLMDB(tst_data, args.tokenizer, args.sequence_length, causal=args.causal) for tst_data in args.tst_data]
 
     tokenizer = spm.SentencePieceProcessor()
     tokenizer.Load(args.tokenizer)
-    model = net_factory(args.net_config, token_count=tokenizer.GetPieceSize())
+    model = net_factory(args.net_config, token_count=tokenizer.GetPieceSize(), causal=args.causal)
     print(model)
 
-    LOSS = CrossEntropyLoss()
+    mask_token_id = -1 if args.causal else 0
+    LOSS = CrossEntropyLoss(mask_token_id=mask_token_id)
     METRICS = {'accuracy': Accuracy()}
 
     learning_loop = LearningLoop(args, model, loss=LOSS, metrics=METRICS, trn_dataset=dataset_trn,

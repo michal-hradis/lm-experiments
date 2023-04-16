@@ -39,8 +39,9 @@ class TextTransformer(torch.nn.Module):
         self.layers = layers
         dropout = 0
         self.dropout = dropout
+        device = 'cpu'
 
-        self.src_mask = generate_square_subsequent_mask(1024).to('cuda') if causal else torch.zeros((1024, 1024)).to('cuda')
+        self.src_mask = generate_square_subsequent_mask(1024).to(device) if causal else torch.zeros((1024, 1024)).to(device)
         self.embed = torch.nn.Embedding(token_count, embedding_dim=self.model_dim)
 
         if start_conv:

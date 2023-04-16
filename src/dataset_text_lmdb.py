@@ -14,11 +14,13 @@ class TextDatasetLMDB(Dataset):
     The dataset returns a tensor of token ids for the document. Token sequence is randomly cropped or padded to max_len.
     """
 
-    def __init__(self, lmdb_path, sp_model_path, max_len=512, compressed=True, mask_prob=0.2, mask_whole_words=True, mask_token_id=3, random_token_prob=0.1):
+    def __init__(self, lmdb_path, sp_model_path, max_len=512, compressed=True, mask_prob=0.2, mask_whole_words=True, mask_token_id=3, random_token_prob=0.1,
+                 causal=False):
         self.mask_prob = mask_prob
         self.mask_whole_words = mask_whole_words
         self.mask_token_id = mask_token_id
         self.random_token_prob = random_token_prob
+        self.causal = causal
         self.env = None
         self.txn = None
         self.lmdb_path = lmdb_path
@@ -113,4 +115,7 @@ class TextDatasetLMDB(Dataset):
             tokens = tokens + [0] * (self.max_len - len(tokens))
             masked_tokens = masked_tokens + [0] * (self.max_len - len(masked_tokens))
 
+        if self.causal:
+            tokens = tokens
+            masked_tokens = [2] + masked_tokens[:-1]
         return torch.LongTensor(masked_tokens), torch.LongTensor(tokens)
