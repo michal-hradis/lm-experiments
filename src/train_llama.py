@@ -1,3 +1,4 @@
+import numpy as np
 from unsloth import FastLanguageModel
 import torch
 max_seq_length = 1024 # Choose any! We auto support RoPE Scaling internally!
@@ -47,21 +48,20 @@ alpaca_prompt = """Below is an instruction that describes a task, paired with an
 {}"""
 
 EOS_TOKEN = tokenizer.eos_token # Must add EOS_TOKEN
-def formatting_prompts_func(examples):
-    instructions = examples["instruction"]
-    inputs       = examples["input"]
-    outputs      = examples["output"]
-    texts = []
-    for instruction, input, output in zip(instructions, inputs, outputs):
-        # Must add EOS_TOKEN, otherwise your generation will go on forever!
-        text = alpaca_prompt.format(instruction, input, output) + EOS_TOKEN
-        texts.append(text)
-    return { "text" : texts, }
-pass
+from datasets import Dataset
 
-from datasets import load_dataset
-dataset = load_dataset("yahma/alpaca-cleaned", split = "train")
-dataset = dataset.map(formatting_prompts_func, batched = True,)
+# Define the path to your text file
+text_file_path = "data.txt"
+
+# Load the text file where each line is a separate example
+with open(text_file_path, 'r', encoding='utf-8') as f:
+    lines = f.readlines()
+
+# Strip any leading/trailing whitespace characters (e.g., \n) from each line
+lines = [line.strip() for line in lines]
+
+# Create a Hugging Face Dataset object
+dataset = Dataset.from_dict({"text": lines})
 
 
 from trl import SFTTrainer
@@ -96,24 +96,25 @@ trainer = SFTTrainer(
         save_safetensors = False
     ),
 )
-
+print("Finished training!")
 trainer_stats = trainer.train()
 
 # alpaca_prompt = Copied from above
 FastLanguageModel.for_inference(model) # Enable native 2x faster inference
-inputs = tokenizer(
-[
-    alpaca_prompt.format(
-        "Continue the fibonnaci sequence.", # instruction
-        "1, 1, 2, 3, 5, 8", # input
-        "", # output - leave this blank for generation!
-    )
-], return_tensors = "pt").to("cuda")
-
-outputs = model.generate(**inputs, max_new_tokens = 64, use_cache = True)
-tokenizer.batch_decode(outputs)
 
 
+print("Generating completions...")
+for i in np.random.choice(len(lines), 50):
+    inputs = tokenizer(
+    [
+        lines[i][:64]
+    ], return_tensors = "pt").to("cuda")
+
+    outputs = model.generate(**inputs, max_new_tokens = max_seq_length, use_cache = True)
+    tokenizer.batch_decode(outputs)
+
+
+print("Generating completions while streaming...")
 
 # ------------------------------------------------------------------------------
 from transformers import TextStreamer
