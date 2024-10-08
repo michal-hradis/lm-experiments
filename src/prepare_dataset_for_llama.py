@@ -26,3 +26,6 @@ def main():
                 f.write(args.eol.join(concatenated_line) + '\n')
                 concatenated_line = []
                 concatenated_line_length = 0
+
+if __name__ == '__main__':
+    main()
