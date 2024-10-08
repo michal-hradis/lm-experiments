@@ -101,7 +101,7 @@ trainer_stats = trainer.train()
 
 # alpaca_prompt = Copied from above
 FastLanguageModel.for_inference(model) # Enable native 2x faster inference
-
+model.config.torch_dtype = torch.bfloat16 # Otherwise, it crashes due to the value being a string "bfloat16"
 
 print("Generating completions...")
 for i in np.random.choice(len(lines), 50):
