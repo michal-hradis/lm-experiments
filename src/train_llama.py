@@ -1,10 +1,10 @@
 from unsloth import FastLanguageModel
 import torch
-max_seq_length = 2048 # Choose any! We auto support RoPE Scaling internally!
+max_seq_length = 1024 # Choose any! We auto support RoPE Scaling internally!
 dtype = None # None for auto detection. Float16 for Tesla T4, V100, Bfloat16 for Ampere+
 load_in_4bit = False # Use 4bit quantization to reduce memory usage. Can be False.
-batch_size = 8
-gradient_accumulation_steps = 4
+batch_size = 4
+gradient_accumulation_steps = 16
 max_steps = 1000
 learning_rate = 0.00005
 
@@ -91,6 +91,9 @@ trainer = SFTTrainer(
         lr_scheduler_type = "linear",
         seed = 3407,
         output_dir = "outputs",
+        save_strategy = "steps",
+        save_steps = 500,
+        save_safetensors = False
     ),
 )
 
