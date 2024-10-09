@@ -69,7 +69,7 @@ def main():
 
     val_dataset = load_text_dataset(args.val_data) if args.val_data else None
     EOS_TOKEN = tokenizer.eos_token # Must add EOS_TOKEN
-    args = TrainingArguments(
+    train_args = TrainingArguments(
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         warmup_steps=args.warmup_steps,
@@ -81,7 +81,6 @@ def main():
         logging_steps=1,
         optim="adamw_8bit",
         weight_decay=args.weight_decay,
-        lr_scheduler_type=args.lr_scheduler_type,
         seed=3408,
         output_dir=args.output_dir,
         save_strategy="steps",
@@ -106,7 +105,7 @@ def main():
                 max_seq_length = args.max_seq_length,
                 dataset_num_proc = 6,
                 packing = True, # Can make training 5x faster for short sequences.
-                args = args,
+                args = train_args,
             )
             print("Finished training!")
             trainer_stats = trainer.train()
