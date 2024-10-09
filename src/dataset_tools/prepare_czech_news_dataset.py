@@ -1,7 +1,7 @@
 from datasets import load_dataset
 
-for split in ['train', 'validation', 'test']:
-    dataset = load_dataset('hynky/czech_news_dataset_v2', split='train', streaming=True)
+for split in ['validation', 'test']:
+    dataset = load_dataset('hynky/czech_news_dataset_v2', split=split, streaming=True)
     with open(f'czech_news_dataset_{split}.txt', 'w') as f:
         dataset_iter = iter(dataset)
         for record in dataset_iter:
