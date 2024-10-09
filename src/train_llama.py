@@ -97,7 +97,7 @@ def main():
         model = model,
         tokenizer = tokenizer,
         train_dataset = train_dataset,
-        eval_dataset  = val_dataset.sample(args.val_size),
+        eval_dataset  = val_dataset[:args.val_size],
         compute_metrics = metric,
         dataset_text_field = "text",
         max_seq_length = args.max_seq_length,
