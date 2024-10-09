@@ -1,116 +1,109 @@
 import numpy as np
-from unsloth import FastLanguageModel
 import torch
-max_seq_length = 512 # Choose any! We auto support RoPE Scaling internally!
-dtype = None # None for auto detection. Float16 for Tesla T4, V100, Bfloat16 for Ampere+
-load_in_4bit = False # Use 4bit quantization to reduce memory usage. Can be False.
-batch_size = 8
-gradient_accumulation_steps = 16
-max_steps = 20000
-learning_rate = 0.00005
-
-# 4bit pre quantized models we support for 4x faster downloading + no OOMs.
-fourbit_models = [
-    "unsloth/Meta-Llama-3.1-8B-bnb-4bit",      # Llama-3.1 2x faster
-    "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit",
-    "unsloth/Meta-Llama-3.1-70B-bnb-4bit",
-    "unsloth/Meta-Llama-3.1-405B-bnb-4bit",    # 4bit for 405b!
-    "unsloth/Mistral-Small-Instruct-2409",     # Mistral 22b 2x faster!
-    "unsloth/mistral-7b-instruct-v0.3-bnb-4bit",
-    "unsloth/Phi-3.5-mini-instruct",           # Phi-3.5 2x faster!
-    "unsloth/Phi-3-medium-4k-instruct",
-    "unsloth/gemma-2-9b-bnb-4bit",
-    "unsloth/gemma-2-27b-bnb-4bit",            # Gemma 2x faster!
-
-    "unsloth/Llama-3.2-1B-bnb-4bit",           # NEW! Llama 3.2 models
-    "unsloth/Llama-3.2-1B-Instruct-bnb-4bit",
-    "unsloth/Llama-3.2-3B-bnb-4bit",
-    "unsloth/Llama-3.2-3B-Instruct-bnb-4bit",
-] # More models at https://huggingface.co/unsloth
-
-model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name = "unsloth/Llama-3.2-1B", # or choose "unsloth/Llama-3.2-1B"
-    max_seq_length = 8192,
-    dtype = dtype,
-    load_in_4bit = load_in_4bit,
-    # token = "hf_...", # use one if using gated models like meta-llama/Llama-2-7b-hf
-)
-
-
-EOS_TOKEN = tokenizer.eos_token # Must add EOS_TOKEN
+import argparse
+import numpy as np
 from datasets import Dataset
-
-# Define the path to your text file
-text_file_path = "data.txt"
-
-# Load the text file where each line is a separate example
-with open(text_file_path, 'r', encoding='utf-8') as f:
-    lines = f.readlines()
-
-# Strip any leading/trailing whitespace characters (e.g., \n) from each line
-lines = [line.strip() for line in lines]
-
-# Create a Hugging Face Dataset object
-dataset = Dataset.from_dict({"text": lines})
-
-
+from unsloth import FastLanguageModel
 from trl import SFTTrainer
-from transformers import TrainingArguments
+import evaluate
+from transformers import TrainingArguments, TextStreamer
 from unsloth import is_bfloat16_supported
 
-trainer = SFTTrainer(
-    model = model,
-    tokenizer = tokenizer,
-    train_dataset = dataset,
-    dataset_text_field = "text",
-    max_seq_length = max_seq_length,
-    dataset_num_proc = 6,
-    packing = False, # Can make training 5x faster for short sequences.
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model-name", type=str, default="unsloth/Llama-3.2-1B", help="Either Hugging Face model name or path to model directory.")
+    parser.add_argument("--max-seq-length", type=int, default=512, help="Maximum sequence length for the model.")
+    parser.add_argument("--batch-size", type=int, default=8, help="Batch size for training.")
+    parser.add_argument("--gradient-accumulation-steps", type=int, default=16, help="Number of steps to accumulate gradients.")
+    parser.add_argument("--max-steps", type=int, default=20000, help="Maximum number of training steps.")
+    parser.add_argument("--learning-rate", type=float, default=0.00005, help="Learning rate for training.")
+    parser.add_argument("--output-dir", type=str, default="./checkpoints", help="Output directory for checkpoints.")
+    parser.add_argument("--seed", type=int, default=3408, help="Random seed for reproducibility.")
+    parser.add_argument("--save-steps", type=int, default=500, help="Number of steps to save checkpoints.")
+
+    parser.add_argument('--train-data', type=str, default='data.txt', help='Path to training data file.')
+    parser.add_argument('--val-data', type=str, help='Path to validation data file.')
+    parser.add_argument('--num-proc', type=int, default=6, help='Number of processes to use for data loading.')
+
+
+    parser.add_argument('--packing', action='store_true', help='Whether to pack sequences into a single tensor.')
+    parser.add_argument('--warmup-steps', type=int, default=20, help='Number of warmup steps.')
+    parser.add_argument('--lr-scheduler-type', type=str, default='linear', help='Type of learning rate scheduler.')
+    parser.add_argument('--weight-decay', type=float, default=0.01, help='Weight decay for optimizer.')
+    return parser.parse_args()
+
+
+def load_text_dataset(file_path: str):
+    with open(file_path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+    lines = [line.strip() for line in lines]
+    return Dataset.from_dict({"text": lines})
+
+def main():
+    args = parse_args()
+
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        model_name = args.model_name,
+        max_seq_length = 8192,
+        dtype = None,
+        load_in_4bit = False,
+    )
+
+    EOS_TOKEN = tokenizer.eos_token # Must add EOS_TOKEN
+
+    train_dataset = load_text_dataset(args.train_data)
+    val_dataset = load_text_dataset(args.val_data) if args.val_data else None
+
+    metric = evaluate.load("perplexity")
     args = TrainingArguments(
-        per_device_train_batch_size = batch_size,
-        gradient_accumulation_steps = gradient_accumulation_steps,
-        warmup_steps = 20,
+        per_device_train_batch_size=args.batch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        warmup_steps=args.warmup_steps,
         # num_train_epochs = 1, # Set this for 1 full training run.
-        max_steps = max_steps,
-        learning_rate = learning_rate,
-        fp16 = not is_bfloat16_supported(),
-        bf16 = is_bfloat16_supported(),
-        logging_steps = 1,
-        optim = "adamw_8bit",
-        weight_decay = 0.01,
-        lr_scheduler_type = "linear",
-        seed = 3408,
-        output_dir = "/mnt/data3/checkpoints_2",
-        save_strategy = "steps",
-        save_steps = 500,
-        save_safetensors = False
-    ),
-)
-print("Finished training!")
-trainer_stats = trainer.train()
+        max_steps=args.max_steps,
+        learning_rate=args.learning_rate,
+        fp16=not is_bfloat16_supported(),
+        bf16=is_bfloat16_supported(),
+        logging_steps=1,
+        optim="adamw_8bit",
+        weight_decay=args.weight_decay,
+        lr_scheduler_type=args.lr_scheduler_type,
+        seed=3408,
+        output_dir=args.output_dir,
+        save_strategy="steps",
+        save_steps=args.save_steps,
+        save_safetensors=False
+    )
 
-# alpaca_prompt = Copied from above
-FastLanguageModel.for_inference(model) # Enable native 2x faster inference
-model.config.torch_dtype = torch.bfloat16 # Otherwise, it crashes due to the value being a string "bfloat16"
-from transformers import TextStreamer
+    trainer = SFTTrainer(
+        model = model,
+        tokenizer = tokenizer,
+        train_dataset = train_dataset,
+        eval_dataset  = val_dataset,
+        compute_metrics = metric,
+        dataset_text_field = "text",
+        max_seq_length = args.max_seq_length,
+        dataset_num_proc = 6,
+        packing = False, # Can make training 5x faster for short sequences.
+        args = args,
+    )
+    print("Finished training!")
+    trainer_stats = trainer.train()
 
-print("Generating completions...")
-for i in np.random.choice(len(lines), 50):
-    inputs = tokenizer(
-    [
-        lines[i][:64]
-    ], return_tensors = "pt").to("cuda")
+    # alpaca_prompt = Copied from above
+    FastLanguageModel.for_inference(model) # Enable native 2x faster inference
+    model.config.torch_dtype = torch.bfloat16 # Otherwise, it crashes due to the value being a string "bfloat16"
+    from transformers import TextStreamer
 
-    #outputs = model.generate(**inputs, max_new_tokens = max_seq_length, use_cache = True)
-    #print(tokenizer.batch_decode(outputs))
-    text_streamer = TextStreamer(tokenizer)
-    _ = model.generate(**inputs, streamer = text_streamer, max_new_tokens = 2048)
-    print("\n")
+    print("Generating completions on validation set...")
+    for i in np.random.randint(0, len(val_dataset), 10):
+        inputs = tokenizer(
+        [
+            val_dataset[i]["text"]
+        ], return_tensors = "pt").to("cuda")
 
-
-print("Generating completions while streaming...")
-
-# ------------------------------------------------------------------------------
-#text_streamer = TextStreamer(tokenizer)
-#_ = model.generate(**inputs, streamer = text_streamer, max_new_tokens = 2048)
-
+        #outputs = model.generate(**inputs, max_new_tokens = max_seq_length, use_cache = True)
+        #print(tokenizer.batch_decode(outputs))
+        text_streamer = TextStreamer(tokenizer)
+        _ = model.generate(**inputs, streamer = text_streamer, max_new_tokens = 2048)
+        print("\n")
