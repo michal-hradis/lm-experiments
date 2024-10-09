@@ -3,6 +3,7 @@ import torch
 import argparse
 import numpy as np
 from datasets import Dataset
+from glob import glob
 from unsloth import FastLanguageModel
 from trl import SFTTrainer
 import evaluate
@@ -66,18 +67,13 @@ def main():
         load_in_4bit = False,
     )
 
-    EOS_TOKEN = tokenizer.eos_token # Must add EOS_TOKEN
-
-    train_dataset = load_text_dataset(args.train_data)
     val_dataset = load_text_dataset(args.val_data) if args.val_data else None
-
-    metric = evaluate.load("perplexity")
+    EOS_TOKEN = tokenizer.eos_token # Must add EOS_TOKEN
     args = TrainingArguments(
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         warmup_steps=args.warmup_steps,
-        # num_train_epochs = 1, # Set this for 1 full training run.
-        max_steps=args.max_steps,
+        num_train_epochs=1,
         learning_rate=args.learning_rate,
         fp16=not is_bfloat16_supported(),
         bf16=is_bfloat16_supported(),
@@ -92,21 +88,33 @@ def main():
         save_safetensors=False,
         eval_steps=args.save_steps,
     )
+    epoch = 0
 
-    trainer = SFTTrainer(
-        model = model,
-        tokenizer = tokenizer,
-        train_dataset = train_dataset,
-        eval_dataset  = val_dataset[:args.val_size],
-        compute_metrics = metric,
-        dataset_text_field = "text",
-        max_seq_length = args.max_seq_length,
-        dataset_num_proc = 6,
-        packing = True, # Can make training 5x faster for short sequences.
-        args = args,
-    )
-    print("Finished training!")
-    trainer_stats = trainer.train()
+    while epoch < args.max_steps:
+        for file_path in glob(f"{args.train_data}/x*"):
+            print(f"Loading {file_path}...")
+            train_dataset = load_text_dataset(file_path)
+            print(f"Loaded {len(train_dataset)} samples.")
+
+            trainer = SFTTrainer(
+                model = model,
+                tokenizer = tokenizer,
+                train_dataset = train_dataset,
+                eval_dataset  = val_dataset[:args.val_size],
+                dataset_text_field = "text",
+                max_seq_length = args.max_seq_length,
+                dataset_num_proc = 6,
+                packing = True, # Can make training 5x faster for short sequences.
+                args = args,
+            )
+            print("Finished training!")
+            trainer_stats = trainer.train()
+
+            # save the model
+            model.save_pretrained(f"{args.output_dir}/epoch_{epoch}")
+            epoch += 1
+            if epoch >= args.max_steps:
+                break
 
     # alpaca_prompt = Copied from above
     FastLanguageModel.for_inference(model) # Enable native 2x faster inference
