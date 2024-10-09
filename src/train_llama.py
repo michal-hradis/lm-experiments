@@ -125,3 +125,6 @@ def main():
         text_streamer = TextStreamer(tokenizer)
         _ = model.generate(**inputs, streamer = text_streamer, max_new_tokens = 2048)
         print("\n")
+
+if __name__ == "__main__":
+    main()
