@@ -75,6 +75,7 @@ def main():
         warmup_steps=args.warmup_steps,
         num_train_epochs=1,
         learning_rate=args.learning_rate,
+        lr_scheduler_type="constant",
         fp16=not is_bfloat16_supported(),
         bf16=is_bfloat16_supported(),
         logging_steps=1,
