@@ -23,6 +23,7 @@ def parse_args():
 
     parser.add_argument('--train-data', type=str, default='data.txt', help='Path to training data file.')
     parser.add_argument('--val-data', type=str, help='Path to validation data file.')
+    parser.add_argument('--val-size', type=int, default=512, help='Number of samples to use for validation.')
     parser.add_argument('--num-proc', type=int, default=6, help='Number of processes to use for data loading.')
 
 
@@ -38,6 +39,22 @@ def load_text_dataset(file_path: str):
         lines = f.readlines()
     lines = [line.strip() for line in lines]
     return Dataset.from_dict({"text": lines})
+
+def compute_metrics(eval_preds):
+    logits, labels = eval_preds
+    if isinstance(logits, tuple):
+        logits = logits[0]
+    # Shift logits and labels to align correctly for cross-entropy calculation
+    shift_logits = logits[..., :-1, :].contiguous()
+    shift_labels = labels[..., 1:].contiguous()
+
+    # Compute the loss
+    loss_fct = torch.nn.CrossEntropyLoss()
+    loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+
+    # Perplexity is the exponential of the loss
+    perplexity = torch.exp(loss)
+    return {"perplexity": perplexity.item()}
 
 def main():
     args = parse_args()
@@ -72,19 +89,20 @@ def main():
         output_dir=args.output_dir,
         save_strategy="steps",
         save_steps=args.save_steps,
-        save_safetensors=False
+        save_safetensors=False,
+        eval_steps=args.save_steps,
     )
 
     trainer = SFTTrainer(
         model = model,
         tokenizer = tokenizer,
         train_dataset = train_dataset,
-        eval_dataset  = val_dataset,
+        eval_dataset  = val_dataset.sample(args.val_size),
         compute_metrics = metric,
         dataset_text_field = "text",
         max_seq_length = args.max_seq_length,
         dataset_num_proc = 6,
-        packing = False, # Can make training 5x faster for short sequences.
+        packing = True, # Can make training 5x faster for short sequences.
         args = args,
     )
     print("Finished training!")
