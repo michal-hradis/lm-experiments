@@ -29,7 +29,7 @@ def parse_args():
 
 
     parser.add_argument('--packing', action='store_true', help='Whether to pack sequences into a single tensor.')
-    parser.add_argument('--warmup-steps', type=int, default=20, help='Number of warmup steps.')
+    parser.add_argument('--warmup-steps', type=int, default=50, help='Number of warmup steps.')
     parser.add_argument('--lr-scheduler-type', type=str, default='linear', help='Type of learning rate scheduler.')
     parser.add_argument('--weight-decay', type=float, default=0.01, help='Weight decay for optimizer.')
     return parser.parse_args()
@@ -75,7 +75,7 @@ def main():
         warmup_steps=args.warmup_steps,
         num_train_epochs=1,
         learning_rate=args.learning_rate,
-        lr_scheduler_type="constant",
+        lr_scheduler_type="constant_with_warmup",
         fp16=not is_bfloat16_supported(),
         bf16=is_bfloat16_supported(),
         logging_steps=1,
@@ -90,7 +90,9 @@ def main():
     )
     epoch = 0
 
+    print('EPOCH FULL', args.max_steps)
     while epoch < args.max_steps:
+        print('EPOCH FULL', args.max_steps, epoch)
         for file_path in glob(f"{args.train_data}/x*"):
             print(f"Loading {file_path}...")
             train_dataset = load_text_dataset(file_path)
@@ -100,7 +102,6 @@ def main():
                 model = model,
                 tokenizer = tokenizer,
                 train_dataset = train_dataset,
-                eval_dataset  = val_dataset[:args.val_size],
                 dataset_text_field = "text",
                 max_seq_length = args.max_seq_length,
                 dataset_num_proc = 6,
@@ -111,7 +112,7 @@ def main():
             trainer_stats = trainer.train()
 
             # save the model
-            model.save_pretrained(f"{args.output_dir}/epoch_{epoch}")
+            trainer.save_model(f"{args.output_dir}/epoch_{epoch}")
             epoch += 1
             if epoch >= args.max_steps:
                 break
