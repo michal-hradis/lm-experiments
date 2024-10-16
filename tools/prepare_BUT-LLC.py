@@ -25,7 +25,6 @@ def main():
                 if title:
                     full_text = f'TITLE: {title} ' + full_text
                 full_text = full_text.replace('\n', ' <br> ')
-                line_lengths.append(len(full_text))
 
                 if len(full_text) < args.min_length:
                     continue
