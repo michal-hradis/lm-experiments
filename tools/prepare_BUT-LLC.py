@@ -19,7 +19,7 @@ def main():
             data = json.loads(line)
             title = data['title']
             text = data['text']
-            full_text = f'TEXT: {text}
+            full_text = f'TEXT: {text}'
             if title:
                 full_text = f'TITLE: {title} ' + full_text
             if len(full_text) >= args.min_length:
