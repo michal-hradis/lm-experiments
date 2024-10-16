@@ -1,5 +1,6 @@
 import json
 import argparse
+import numpy as np
 
 
 def parseargs():
@@ -13,9 +14,10 @@ def parseargs():
 
 def main():
     args = parseargs()
+    line_lengths = []
     with open(args.input, 'r', encoding='utf-8') as f_in:
         with open(args.output, 'w', encoding='utf-8') as f_out:
-            for line in f_in:
+            for i, line in enumerate(f_in):
                 data = json.loads(line)
                 title = data['title']
                 text = data['text']
@@ -23,9 +25,16 @@ def main():
                 if title:
                     full_text = f'TITLE: {title} ' + full_text
                 full_text = full_text.replace('\n', ' <br> ')
+                line_lengths.append(len(full_text))
 
-                if len(full_text) >= args.min_length:
-                    f_out.write(full_text + '\n')
+                if len(full_text) < args.min_length:
+                    continue
+
+                f_out.write(full_text + '\n')
+                line_lengths.append(len(full_text))
+
+                if i % 10000 == 0:
+                    print(f'Processed {i}, kept {len(line_lengths)}, avg length: {np.mean(line_lengths):.1f}, median length: {np.median(line_lengths):.1f}')
 
 
 if __name__ == '__main__':
