@@ -21,7 +21,7 @@ def main():
                 data = json.loads(line)
                 title = data['title']
                 text = data['text']
-                full_text = f'TEXT: {text}'
+                full_text = f'TEXT: {text} <eos> '
                 if title:
                     full_text = f'TITLE: {title} ' + full_text
                 full_text = full_text.replace('\n', ' <br> ')
