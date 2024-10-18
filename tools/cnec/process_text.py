@@ -1,7 +1,7 @@
 from unsloth import FastLanguageModel
 import torch
 import argparse
-import tqdm
+from tqd import tqdm
 import logging
 from prepare_cnec import prepare_prompt
 
