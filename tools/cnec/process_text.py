@@ -41,7 +41,8 @@ def main():
 
         outputs = model.generate(**inputs, max_new_tokens=input_length * 1.3, use_cache=True)
         output = tokenizer.batch_decode(outputs)[0]
-        output = output[len(prefix):]
+        # Get text after "entity:"
+        output = output.split('entity:')[1]
         if '<|EOS|>' not in output:
             logging.warning(f'No <|EOS|> in output: {output}')
         output = output.split('<|EOS|>')[0]
