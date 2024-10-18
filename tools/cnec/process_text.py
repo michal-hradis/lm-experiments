@@ -2,6 +2,7 @@ from unsloth import FastLanguageModel
 import torch
 import argparse
 import tqdm
+import logging
 from prepare_cnec import prepare_prompt
 
 def parseargs():
@@ -15,6 +16,7 @@ def parseargs():
 
 def main():
     args = parseargs()
+    logging.basicConfig(level=logging.INFO)
 
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name = args.model, # or choose "unsloth/Llama-3.2-1B"
@@ -35,9 +37,16 @@ def main():
         [
             prefix
         ], return_tensors = "pt").to("cuda")
+        input_length = inputs['input_ids'].shape[1]
 
-        outputs = model.generate(**inputs, max_new_tokens = 2048, use_cache = True)
-        f_out.write(tokenizer.batch_decode(outputs)[0] + '\n')
+        outputs = model.generate(**inputs, max_new_tokens=input_length * 1.3, use_cache=True)
+        output = tokenizer.batch_decode(outputs)[0]
+        output = output[len(prefix):]
+        if '<|EOS|>' not in output:
+            logging.warning(f'No <|EOS|> in output: {output}')
+        output = output.split('<|EOS|>')[0]
+        output = ' '.join(output.split())
+        f_out.write(output + '\n')
 
 
 if __name__ == '__main__':
