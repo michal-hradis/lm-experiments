@@ -73,7 +73,7 @@ def main():
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         warmup_steps=args.warmup_steps,
-        num_train_epochs=1,
+        num_train_epochs=5,
         learning_rate=args.learning_rate,
         lr_scheduler_type="constant_with_warmup",
         fp16=not is_bfloat16_supported(),
@@ -105,7 +105,7 @@ def main():
                 dataset_text_field = "text",
                 max_seq_length = args.max_seq_length,
                 dataset_num_proc = 6,
-                packing = True, # Can make training 5x faster for short sequences.
+                packing = args.packing, # Can make training 5x faster for short sequences.
                 args = train_args,
             )
             print("Finished training!")
