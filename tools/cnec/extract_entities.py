@@ -46,15 +46,15 @@ def extract_entities(text: str, sequence_id: str) -> list[tuple[str, str, str]]:
             word_position += 1
 
     if stack:
-        logging.warning(f"Missing closing tags: {stack} in sequence {sequence_id}")
+        logging.warning(f"Failed closing tag without opening tag: {stack} in sequence {sequence_id}")
         for tag, start_position in stack:
-            tag = tag[:1]
             entity = " ".join(text_words[start_position:])
             entity_id = []
             for i in range(start_position, word_position):
                 entity_id.append(f"s{sequence_id}w{i}")
-            entity_id = ",".join
+            entity_id = ",".join(entity_id)
             entities.append((entity_id, tag, entity))
+
 
     for tag, start_position in stack:
         entities.append((tag, start_position, word_position))
